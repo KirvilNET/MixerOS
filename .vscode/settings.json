@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./MixerOS/src-tauri/Cargo.toml"
+    ]
+}

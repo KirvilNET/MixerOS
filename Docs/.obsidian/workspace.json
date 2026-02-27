@@ -1,0 +1,247 @@
+{
+  "main": {
+    "id": "af2e224122e0bd3d",
+    "type": "split",
+    "children": [
+      {
+        "id": "14bb762ad8bf917f",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3fa4334fb66c1fb0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Stage Boxes/Overview/Overview.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Overview"
+            }
+          },
+          {
+            "id": "0ae3a28e0fb3c1db",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Stage Boxes/Overview/Specs.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Specs"
+            }
+          },
+          {
+            "id": "d5a3816762265d91",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Stage Boxes/Software/Software.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Software"
+            }
+          },
+          {
+            "id": "6eee85b9e692f55d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Stage Boxes/Overview/Overview.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Overview"
+            }
+          }
+        ],
+        "currentTab": 3
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "0f078031e2ba320a",
+    "type": "split",
+    "children": [
+      {
+        "id": "c3c0d754f48bd962",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e27cd46f68ed2dab",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "byModifiedTimeReverse",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "95274a5f5b82304d",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "b560682ea876ab40",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "36afe19c03e03712",
+    "type": "split",
+    "children": [
+      {
+        "id": "db5b58fc9c7f4118",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "b81f48364b9766b8",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Stage Boxes/Overview/Overview.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Overview"
+            }
+          },
+          {
+            "id": "6120888784280879",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Stage Boxes/Overview/Overview.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Overview"
+            }
+          },
+          {
+            "id": "6843ea62fa162224",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "f9952aa040c00bec",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "531683a6d158e990",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Stage Boxes/Overview/Overview.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Overview"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "6eee85b9e692f55d",
+  "lastOpenFiles": [
+    "Stage Boxes/Overview/Specs.md",
+    "Stage Boxes/Overview/Overview.md",
+    "Stage Boxes/Media/Screenshot 2026-02-14 at 11.11.57 AM.png",
+    "Stage Boxes/Hardware/Hardware.md",
+    "Stage Boxes/Software/Software.md",
+    "Stage Boxes/Hardware/IO Panel/Screen.md",
+    "Stage Boxes/Hardware/IO Panel/IO Panel.md",
+    "Stage Boxes/Hardware/IO Panel",
+    "Stage Boxes/Software",
+    "Stage Boxes/Hardware",
+    "Stage Boxes/Stageboxes.canvas",
+    "Stage Boxes/Media/zynq-mp-core-dual1_501467e669fcba329e86f04a138fd9a4843d4def.webp",
+    "Stage Boxes/Media",
+    "Stage Boxes/Overview",
+    "Stage Boxes"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../ravennakit-rs"
+		}
+	],
+	"settings": {
+		"rust-analyzer.linkedProjects": [
+			"./MixerOS/src-tauri/Cargo.toml"
+		]
+	}
+}

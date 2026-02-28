@@ -85,7 +85,7 @@ impl EqBand {
 
       for sample in &mut buffer.iter_mut() {
 
-        output.push(self.process(sample));
+        output.push(self.process(*sample));
  
       }
     }

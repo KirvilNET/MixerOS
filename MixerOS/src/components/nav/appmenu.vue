@@ -86,7 +86,7 @@
 </script>
 
 <template>
-  <div class="flex flex-row w-screen h-6 justify-between">
+  <div class="flex flex-row w-screen h-1 justify-between">
     <div class="gap-4 px-2 flex flex-row justify-center items-center">
       <button class="text-white hover:text-[#8b8b8b]" @click="Filetoggle">File</button>
       <TieredMenu ref="Filemenu" :model="Fileitems" popup >

@@ -1,92 +1,107 @@
-use cpal;
-use dasp;
-use num;
+use anyhow::Ok;
 
-use super::biquad::{BiquadCoeffs, BiquadState};
+use super::biquad::BiquadCoeffs;
 use crate::dasp::dasp_modules::module::*;
-use std::sync::{Arc, RwLock};
+use std::{any::{Any, TypeId}, error::Error, sync::{Arc, RwLock}};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BandType {
-    Peaking,
-    LowShelf,
-    HighShelf,
-    LowPass,
-    HighPass,
+    /// Low pass filter
+    LPF,
+    /// High pass filter
+    HPF,
+    /// Band pass filter
+    BPF,
+    /// Notch filter
+    NOTCH,
+    /// Peak filter
+    PEAK,
+    /// Low shelf filter
+    LSHELF,
+    /// High shelf filter
+    HSHELF,
+}
+
+pub enum ModuleError {
+    MaxBands,
+    NotFound,
+    ParameterError,
+    ReadError
 }
 
 #[derive(Debug, Clone)]
-pub struct EqBandParams {
-    pub freq: f32,
-    pub gain_db: f32,
-    pub q: f32,
+pub struct EqBand {
+    /// id of the band
+    pub id: usize,
+    /// Sampling frequency (hz)
+    pub fs: f32,
+    /// Center frequency (hz)
+    pub f0: f32,
+    /// Q parameter for filters
+    pub q: Option<f32>,
+    /// Bandwidth parameter for filters
+    pub bw: Option<f32>,
+    /// Gain parameter for filters
+    pub gain: Option<f32>,
+    /// kind of band
     pub kind: BandType,
+    /// Is enabled
     pub enabled: bool,
 }
 
-pub struct EqBand {
-    pub params: Arc<RwLock<EqBandParams>>,
-    coeffs: BiquadCoeffs,
-    state: BiquadState,
-    sample_rate: f32,
-    dirty: bool,
+pub struct ParametricEq {
+    bands: Arc<RwLock<Vec<EqBand>>>,
+    enabled: bool,
 }
 
-impl EqBand {
-    pub fn new(params: EqBandParams, sample_rate: f32) -> Self {
-        let coeffs = Self::compute_coeffs(&params, sample_rate);
+impl ParametricEq {
+    pub fn new(bands: Vec<EqBand>) -> Self {
+        let mut bands = Arc::new(RwLock::new(Vec::<EqBand>::with_capacity(6)));
 
         Self {
-            params: Arc::new(RwLock::new(params)),
-            coeffs,
-            state: BiquadState::default(),
-            sample_rate,
-            dirty: false,
+            bands,
+            enabled: true
         }
     }
 
-    fn compute_coeffs(p: &EqBandParams, sr: f32) -> BiquadCoeffs {
-        match p.kind {
-            BandType::Peaking => BiquadCoeffs::peaking(p.freq, p.gain_db, p.q, sr),
-            BandType::LowShelf => BiquadCoeffs::low_shelf(p.freq, p.gain_db, p.q, sr),
-            BandType::HighShelf => BiquadCoeffs::high_shelf(p.freq, p.gain_db, p.q, sr),
-            BandType::LowPass => BiquadCoeffs::low_pass(p.freq, p.q, sr),
-            BandType::HighPass => BiquadCoeffs::high_pass(p.freq, p.q, sr),
+    pub fn add_band(&mut self, band: EqBand) -> Result<(), ModuleError> {
+        let mut band_array = match self.bands.try_read() {
+            Result::Ok(bands) => bands,
+            Err(_) => return Result::Err(ModuleError::ReadError),
+        };
+
+        if band_array.iter().len() == 6 {
+            return Err(ModuleError::MaxBands)
         }
+
+        if band_array.iter().len() < 6 {
+            self.bands.try_write().expect("Could not write new band").insert(1, band);
+        }
+        
+        self.bands.try_write().expect("Could not sort array").sort_by_key(|k| k.id);
+
+        Result::Ok(())
     }
 
-    /// Call this at the start of each audio block to pick up param changes
-    pub fn update(&mut self) {
-        if self.dirty {
-            if let Ok(p) = self.params.try_read() {
-                self.coeffs = Self::compute_coeffs(&p, self.sample_rate);
+    pub fn find_by_id(&mut self, id: usize) -> Result<&Arc<EqBand>, ModuleError> {
+        for band in self.bands.read().iter() {
+            if band.id == id {
+                return Result::Ok(band)
             }
-            self.dirty = false;
-        }
-    }
-
-    pub fn mark_dirty(&mut self) {
-        self.dirty = true;
-    }
-
-    /// Process a sample pair
-    pub fn process(&mut self, sample: f32) -> f32 {
-        let enabled = self.params.try_read().map(|p| p.enabled).unwrap_or(true);
-
-        if !enabled {
-            return sample
         }
 
-        self.coeffs.process(sample, &mut self.state)
+        return Err(ModuleError::NotFound)
     }
 
-    pub fn process_buffer(&mut self, buffer: &mut [f32]) {
-      let mut output: Vec<f32> = Vec::new();
+    pub fn update(&mut self, id: usize, new_band: EqBand) -> Result<(), ModuleError> {
+        let curr_band = self.find_by_id(id);
 
-      for sample in &mut buffer.iter_mut() {
-
-        output.push(self.process(*sample));
- 
-      }
+        match curr_band {
+            Result::Ok(_) => {
+                _ = new_band;
+                return Result::Ok(())
+            },
+            Err(e) => return Err(e),
+        }
     }
 }

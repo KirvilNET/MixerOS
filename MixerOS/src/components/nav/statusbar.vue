@@ -1,4 +1,4 @@
-<script setup lang="ts">
+1<script setup lang="ts">
   import { ref, onMounted, onUnmounted } from 'vue';
 
   const currentTime = ref({ hour: 0, min: 0, second: 0, });

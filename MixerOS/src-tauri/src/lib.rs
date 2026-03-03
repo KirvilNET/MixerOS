@@ -3,9 +3,6 @@ use std::sync::Arc;
 use tauri::Manager;
 use tauri::async_runtime::Mutex;
 
-mod dsp_engine;
-mod commands;
-
 pub struct AppState {
     
 }

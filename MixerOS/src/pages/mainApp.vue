@@ -13,8 +13,8 @@
 
 <template>
     <div class="bg-[#121212] min-h-screen overflow-hidden">
-        <div class="flex flex-col gap-2">
-            <div class="p-1 mt-2">
+        <div class="flex flex-col gap-0">
+            <div class="p-1 mt-1">
                 <appmenu />
             </div>
             <div class="p-2 gap-2">

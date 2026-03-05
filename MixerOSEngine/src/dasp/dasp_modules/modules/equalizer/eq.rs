@@ -83,10 +83,10 @@ impl ParametricEq {
         Result::Ok(())
     }
 
-    pub fn find_by_id(&mut self, id: usize) -> Result<&Arc<EqBand>, ModuleError> {
-        for band in self.bands.read().iter() {
+    pub fn find_by_id(&mut self, id: usize) -> Result<Arc<EqBand>, ModuleError> {
+        for band in self.bands.read().expect("Cant unwrap band").iter() {
             if band.id == id {
-                return Result::Ok(band)
+                return Result::Ok(Arc::new(band.clone()))
             }
         }
 

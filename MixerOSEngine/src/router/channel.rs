@@ -45,13 +45,7 @@ impl ChannelStrip {
   }
 
   pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-    let input_stream: cpal::Stream = self.device.build_input_stream(
-    &self.config, 
-    move |data: &[f32], _: &cpal::InputCallbackInfo| {
-      self.processor.process_chain_buffer_mono(data.as_mut());
-    }, 
-    |err| eprint!("Stream error: {}", err), 
-    None)?;
+     Ok(())
   }
 
   pub fn get_name(&mut self) -> String { return self.name.clone(); }

@@ -9,7 +9,9 @@
 	],
 	"settings": {
 		"rust-analyzer.linkedProjects": [
-			"../aes67-rs/Cargo.toml"
+			"../aes67-rs/Cargo.toml",
+			"./MixerOSEngine/Cargo.toml",
+			"./MixerOS/src-tauri/Cargo.toml"
 		]
 
 	},

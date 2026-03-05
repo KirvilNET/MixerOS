@@ -4,7 +4,7 @@ use cubecl::prelude::Round;
 
 use super::eq::{EqBand, BandType};
 
-use crate::dasp::dasp_modules::{module::DASPModule, modules::equalizer::biquad::BiquadCoeffs, *};
+use crate::dasp::dasp_modules::{module::*, module_param::*, modules::equalizer::biquad::BiquadCoeffs, *};
 
 #[derive(Debug)]
 pub struct ParametricEq {
@@ -12,6 +12,16 @@ pub struct ParametricEq {
     w1: f32,
     w2: f32,
     pub enabled: bool,
+}
+
+impl ModuleInfo for ParametricEq {
+    fn name(&self) -> &str { "Parametric EQ" }
+
+    fn category(&self) -> module_param::ModuleCategory { ModuleCategory::Equalization }
+
+    fn version(&self) -> &str { "1.0.0" }
+
+    fn unique_id(&self) -> &str { "peq" }
 }
 
 impl DASPModule for ParametricEq {
@@ -25,30 +35,16 @@ impl DASPModule for ParametricEq {
             output.push(y);
         }
 
-        output.iter_mut().sum();
+        output.iter().sum()
     }
 
     fn reset(&mut self) {
-        todo!()
+       self.bands.clear();
+       self.w1 = 0.0;
+       self.w2 = 0.0;
     }
+}
 
-    fn set_sample_rate(&mut self, sample_rate: i32) {
-        todo!()
-    }
-
-    fn get_sample_rate(&self) -> f32 {
-        todo!()
-    }
-    
-    fn process_stereo(&mut self, left: Vec<f32>, right: Vec<f32>) -> (f32, f32) {
-        
-    }
-    
-    fn process_buffer(&mut self, buffer: &mut [f32]) {
-
-    }
-    
-    fn process_stereo_buffer(&mut self, left: &mut [f32], right: &mut [f32]) {
-
-    }
+impl Latency for ParametricEq {
+    fn get_latency_samples(&self) -> usize { 3 }
 }

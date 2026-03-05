@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::dasp::dasp_modules::module_param::{ ParameterDescriptor, Preset };
+use crate::dasp::dasp_modules::module_param::{ ParameterDescriptor };
 
 /// Core trait that all DSP processors must implement
 pub trait DASPModule: Send + Sync + Debug {
@@ -40,46 +40,6 @@ pub trait DASPModule: Send + Sync + Debug {
 
 		/// Reset internal state (called when playback starts/stops, or when parameters change drastically)
 		fn reset(&mut self);
-
-		/// Update sample rate (called when audio device changes)
-		fn set_sample_rate(&mut self, sample_rate: i32);
-
-		/// Get the current sample rate
-		fn get_sample_rate(&self) -> f32;
-}
-
-/// Extended trait for processors that have parameters
-pub trait ParametricDASPModule: DASPModule {
-		/// Get the list of parameter definitions
-		fn get_parameters(&self) -> Vec<ParameterDescriptor>;
-
-		/// Get a parameter value by ID
-		fn get_parameter(&self, id: &str) -> Option<f32>;
-
-		/// Set a parameter value by ID
-		fn set_parameter(&mut self, id: &str, value: f32) -> Result<(), String>;
-
-		/// Get parameter value normalized to 0.0-1.0 range
-		fn get_parameter_normalized(&self, id: &str) -> Option<f32> {
-				self.get_parameter(id).and_then(|value| {
-						self.get_parameters()
-								.iter()
-								.find(|p| p.id == id)
-								.map(|p| (value - p.min) / (p.max - p.min))
-				})
-		}
-
-		/// Set parameter from normalized 0.0-1.0 value
-		fn set_parameter_normalized(&mut self, id: &str, normalized: f32) -> Result<(), String> {
-				let param = self.get_parameters()
-						.iter()
-						.find(|p| p.id == id)
-						.ok_or_else(|| format!("Parameter '{}' not found", id))?
-						.clone();
-
-				let value = param.min + normalized.clamp(0.0, 1.0) * (param.max - param.min);
-				self.set_parameter(id, value)
-		}
 }
 
 /// Trait for processors that provide metering/analysis data
@@ -112,30 +72,7 @@ pub trait Bypassable {
 		/// Set bypass state
 		fn set_bypassed(&mut self, bypassed: bool);
 }
-
-/// Trait for processors that support presets
-pub trait PresetSupport {
-		/// Get current state as a preset
-		fn save_preset(&self) -> Preset;
-
-		/// Load a preset
-		fn load_preset(&mut self, preset: &Preset) -> Result<(), String>;
-
-		/// Get list of factory presets
-		fn get_factory_presets(&self) -> Vec<Preset> {
-				Vec::new()
-		}
-}
-
-/// Trait for processors that can be serialized/deserialized
-pub trait Serializable {
-		/// Serialize processor state to bytes
-		fn serialize(&self) -> Result<Vec<u8>, String>;
-
-		/// Deserialize processor state from bytes
-		fn deserialize(&mut self, data: &[u8]) -> Result<(), String>;
-}
-
+ 
 /// Metering data
 #[derive(Debug, Clone, Default)]
 pub struct MeteringData {

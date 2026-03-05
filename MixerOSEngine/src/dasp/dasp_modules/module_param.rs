@@ -43,54 +43,6 @@ impl ParameterDescriptor {
 		}
 }
 
-/// Preset data structure
-#[derive(Debug, Clone)]
-pub struct Preset {
-		pub name: String,
-		pub author: Option<String>,
-		pub description: Option<String>,
-		pub parameters: Vec<(String, f32)>,  // (parameter_id, value)
-}
-
-impl Preset {
-		pub fn new(name: &str) -> Self {
-				Self {
-						name: name.to_string(),
-						author: None,
-						description: None,
-						parameters: Vec::new(),
-				}
-		}
-
-		pub fn add_parameter(&mut self, id: &str, value: f32) {
-				self.parameters.push((id.to_string(), value));
-		}
-}
-
-/// Processor capability flags
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ModuleCapabilities {
-		pub supports_mono: bool,
-		pub supports_stereo: bool,
-		pub supports_multi_channel: bool,
-		pub is_real_time: bool,
-		pub requires_fft: bool,
-		pub can_tail: bool,  // Effect has a tail (reverb, delay)
-}
-
-impl Default for ModuleCapabilities {
-		fn default() -> Self {
-				Self {
-						supports_mono: true,
-						supports_stereo: true,
-						supports_multi_channel: false,
-						is_real_time: true,
-						requires_fft: false,
-						can_tail: false,
-				}
-		}
-}
-
 /// Trait for getting processor metadata
 pub trait ModuleInfo {
 		/// Get processor name
@@ -103,11 +55,6 @@ pub trait ModuleInfo {
 
 		/// Get processor category
 		fn category(&self) -> ModuleCategory;
-
-		/// Get processor capabilities
-		fn capabilities(&self) -> ModuleCapabilities {
-				ModuleCapabilities::default()
-		}
 
 		/// Get unique identifier
 		fn unique_id(&self) -> &str;

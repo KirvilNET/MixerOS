@@ -15,6 +15,11 @@ pub struct Engine {
   dasp_status: DASPStatus
 }
 
+pub enum EngineError {
+  MaxChannels
+  
+}
+
 impl Engine {
   pub fn new(host: Host, ch: usize, buses: usize, bit_depth: BitDepth, sample_rate: SampleRate) -> Self {
     let channel_strips: HashMap<usize, Arc<channel::ChannelStrip>> = HashMap::with_capacity(ch);
@@ -30,8 +35,9 @@ impl Engine {
     }
   }
 
-  pub fn run() {
-    
+  pub fn add_channel(&mut self, channel_number: usize, ch: channel::ChannelStrip) -> Result<(), EngineError> {
+
+    self.channels.insert(channel_number, v)
   }
 
   pub fn get_channels(&mut self) -> HashMap<usize, Arc<channel::ChannelStrip>> {

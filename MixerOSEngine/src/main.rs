@@ -18,10 +18,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
 
   let config: system::state::EngineConfig = sm.load_config().await.expect("could not load config");
 
+  
+
   let dasp_engine = rt.spawn( async {
     let host = engine::select_host().unwrap();
-
     let engine = Engine::new(host, config.channels, config.bus, config.bit_depth, config.sample_rate);
+
+    
   });
 
   //let dasp_interface = rt.spawn( async {});

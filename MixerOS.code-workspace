@@ -4,12 +4,18 @@
 			"path": "."
 		},
 		{
-			"path": "../ravennakit-rs"
+			"path": "../aes67-rs"
 		}
 	],
 	"settings": {
 		"rust-analyzer.linkedProjects": [
-			"./MixerOS/src-tauri/Cargo.toml"
+			"../aes67-rs/Cargo.toml"
+		]
+
+	},
+	"extensions": {
+		"recommendations": [
+			"aaron-bond.better-comments"
 		]
 	}
 }

@@ -16,8 +16,8 @@ pub struct Engine {
 }
 
 pub enum EngineError {
-  MaxChannels
-  
+  MaxChannels,
+  ChannelDoesNotExist
 }
 
 impl Engine {
@@ -36,8 +36,38 @@ impl Engine {
   }
 
   pub fn add_channel(&mut self, channel_number: usize, ch: channel::ChannelStrip) -> Result<(), EngineError> {
+    if self.channels.len() == usize::MAX {
+      return Err(EngineError::MaxChannels)
+    }
 
-    self.channels.insert(channel_number, v)
+    self.channels.insert(channel_number, ch.into()).expect("Could not add Channel");
+    Ok(())
+  }
+
+  pub fn remove_channel(&mut self, channel_number: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+    let channel = self.channels.get(&channel_number);
+    if channel_number > usize::MAX {
+      return Err(EngineError::ChannelDoesNotExist)
+    } 
+
+    match channel {
+        Some(x) => Ok(x),
+        None => Err(EngineError::ChannelDoesNotExist),
+    }
+    
+  }
+
+  pub fn get_channel(&mut self, channel: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+    if self.channels.len() == usize::MAX {
+      return Err(EngineError::MaxChannels)
+    }
+
+    let ch = self.channels.get(&channel);
+
+    match ch {
+        Some(x) => Ok(x),
+        None => Err(EngineError::ChannelDoesNotExist),
+    }
   }
 
   pub fn get_channels(&mut self) -> HashMap<usize, Arc<channel::ChannelStrip>> {

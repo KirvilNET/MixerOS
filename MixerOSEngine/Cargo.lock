@@ -18,6 +18,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "yaml_serde",
+ "yansi",
 ]
 
 [[package]]
@@ -4409,6 +4410,12 @@ dependencies = [
  "serde",
  "unsafe-libyaml",
 ]
+
+[[package]]
+name = "yansi"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "yoke"

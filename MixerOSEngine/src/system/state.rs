@@ -29,7 +29,7 @@ impl Default for EngineConfig {
   fn default() -> Self {
     Self {
       name: "MixerOS-Engine".to_string(),
-      channels: 0,
+      channels: 16,
       bus: 2,
       bit_depth: BitDepth::BIT32,
       sample_rate: SampleRate::Hz48000,

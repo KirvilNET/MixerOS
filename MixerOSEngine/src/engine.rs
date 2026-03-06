@@ -35,6 +35,10 @@ impl Engine {
     }
   }
 
+  pub fn start(&mut self) {
+    
+  }
+
   pub fn add_channel(&mut self, channel_number: usize, ch: channel::ChannelStrip) -> Result<(), EngineError> {
     if self.channels.len() == usize::MAX {
       return Err(EngineError::MaxChannels)

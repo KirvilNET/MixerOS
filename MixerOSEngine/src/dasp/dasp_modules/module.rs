@@ -9,33 +9,19 @@ pub trait DASPModule: Send + Sync + Debug {
 				input // Default: pass-through
 		}
 
-		/// Process a stereo sample pair (left, right)
-		/// 
-		/// Override this for stereo-aware processing (e.g., stereo widener, mid-side processing)
-		fn process_stereo(&mut self, left: f32, right: f32) -> (f32, f32) {
-				(self.process(left), self.process(right))
-		}
-
 		/// Process a buffer of mono samples
 		/// 
 		/// Override this for block-based processing (e.g., FFT-based effects, convolution)
-		fn process_buffer(&mut self, buffer: &mut [f32]) {
-			for sample in buffer.iter_mut() {
-					*sample = self.process(*sample);
+		fn process_buffer(&mut self, buffer: &[f32]) -> Vec<f32> {
+
+			let mut out: Vec<f32> = Vec::with_capacity(buffer.len());
+
+			for sample in buffer.iter() {
+					let proc_smpl = self.process(*sample);
+					out.push(proc_smpl);
 			}
-		}
 
-		/// Process stereo buffers
-		/// 
-		/// Override this for efficient stereo block processing
-		fn process_stereo_buffer(&mut self, left: &mut [f32], right: &mut [f32]) {
-				assert_eq!(left.len(), right.len(), "Stereo buffers must be same length");
-
-				for (l, r) in left.iter_mut().zip(right.iter_mut()) {
-						let (new_l, new_r) = self.process_stereo(*l, *r);
-						*l = new_l;
-						*r = new_r;
-				}
+			return out
 		}
 
 		/// Reset internal state (called when playback starts/stops, or when parameters change drastically)

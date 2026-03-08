@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum BitDepth {
   BIT8,
   BIT16,
@@ -8,12 +8,21 @@ pub enum BitDepth {
   BIT32
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum SampleRate {
   Hz44100 = 441000,
   Hz48000 = 48000,
   Hz96000 = 96000,
   Hz192000 = 192000
+}
+
+pub fn get_sample_rate(rate: SampleRate) -> i32 {
+  match rate {
+    SampleRate::Hz44100 => 44100,
+    SampleRate::Hz48000 => 48000,
+    SampleRate::Hz96000 => 96000,
+    SampleRate::Hz192000 => 192000,
+  }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

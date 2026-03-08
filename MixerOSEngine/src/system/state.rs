@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tokio::{ fs, io };
+use tokio::{ fs };
 
 use std::{path::{Path, PathBuf}, sync::*};
 
@@ -10,14 +10,15 @@ pub struct StateManager {
   config: Arc<Mutex<EngineConfig>>
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct EngineConfig {
   pub name: String,
   pub channels: usize,
   pub bus: usize,
   pub bit_depth: BitDepth,
   pub sample_rate: SampleRate,
-  pub config_path: String
+  pub buffer_size: usize,
+  config_path: String
 }
 
 pub struct DASPState {
@@ -33,19 +34,22 @@ impl Default for EngineConfig {
       bus: 2,
       bit_depth: BitDepth::BIT32,
       sample_rate: SampleRate::Hz48000,
+      buffer_size: 512,
       config_path: " ".to_string()
     }
   }
 }
 
 impl EngineConfig {
-  fn new(name: String, channels: usize, bus: usize, bit_depth: BitDepth, sample_rate: SampleRate ) -> Self {
+  fn new(name: String, channels: usize, bus: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize) -> Self {
+
     Self {
       name,
       channels,
       bus,
       bit_depth,
       sample_rate,
+      buffer_size,
       config_path: " ".to_string()
     }
   }
@@ -72,64 +76,66 @@ pub enum StateManagerError {
 async fn find_file(dir: &Path, target: &str) -> Option<PathBuf> {
   let mut entries = fs::read_dir(dir).await.ok()?;
 
-      while let Ok(Some(entry)) = entries.next_entry().await {
-          let path = entry.path();
-          let meta = fs::metadata(&path).await.ok()?;
-      
-          if meta.is_dir() {
-              // recurse into subdirectory
-              if let Some(found) = Box::pin(find_file(&path, target)).await {
-                  return Some(found);
-              }
-          } else if path.file_name().and_then(|n| n.to_str()) == Some(target) {
-              return Some(path);
+  while let Ok(Some(entry)) = entries.next_entry().await {
+      let path = entry.path();
+      let meta = fs::metadata(&path).await.ok()?;
+  
+      if meta.is_dir() {
+          // recurse into subdirectory
+          if let Some(found) = Box::pin(find_file(&path, target)).await {
+              return Some(found);
           }
+      } else if path.file_name().and_then(|n| n.to_str()) == Some(target) {
+          return Some(path);
       }
+  }
 
-    None
+  None
 }
 
 impl StateManager {
-  pub fn new() -> Self {
-    
+  pub async fn new() -> Self {
     Self {
       dasp_state: Arc::new(Mutex::new(DASPState::default())),
       config: Arc::new(Mutex::new(EngineConfig::default()))
     }
   }
 
-  pub async fn CreateStore(&mut self) -> Result<(), std::io::Error> {
-    let paths: PathBuf = Default::default();
+  pub async fn init(&mut self) -> Result<EngineConfig, StateManagerError>{
 
-    if cfg!(not(target_os = "linux")) {
-      let paths: PathBuf = ["./"].iter().collect();
+    if cfg!(target_os = "linux") {
+      match find_file(Path::new("/var/MixerOS/Engine/config/"), "engine.yaml").await {
+        Some(file) => {
+          let path = file.as_path();
+          Ok(self.load_config(path).await.ok_or(StateManagerError::FsReadError)?)
+        },
+        None => Err(StateManagerError::FsReadError),
+      }
     } else {
-      let paths: PathBuf = ["/var/snap/mixeros-engine/"].iter().collect();
-
-      for path in &paths {
-        if fs::try_exists(path).await? == true {
-          print!("found {:?}", path)
-        } else {
-          return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "Could Not Find Dir"))
-        }
+      match find_file(Path::new("./MixerOS"), "engine.yaml").await {
+        Some(file) => {
+          let path = file.as_path();
+          Ok(self.load_config(path).await.ok_or(StateManagerError::FsReadError)?)
+        },
+        None => Err(StateManagerError::FsReadError),
       }
     }
-    
-    for path in &paths {
-      fs::DirBuilder::new().recursive(true).create(path);
+
+  }
+
+  pub async fn create_store(&mut self) -> Result<(), std::io::Error> {
+    if cfg!(not(target_os = "linux")) {
+      let path: PathBuf = ["./"].iter().collect();
+      let _ = fs::DirBuilder::new().recursive(true).create(path).await;
+    } else {
+      let path: PathBuf = ["/var/snap/mixeros-engine/"].iter().collect();
+      let _ = fs::DirBuilder::new().recursive(true).create(path).await;
     }
 
     Ok(())
   }
 
-  pub async fn load_config(&mut self) -> Option<EngineConfig> {
-    let dir: &Path;
-
-    if cfg!(not(target_os = "linux")) {
-      dir = Path::new("./mixeros-engine");
-    } else {
-      dir = Path::new("/var/snap/mixeros-engine");
-    }
+  pub async fn load_config(&mut self, dir: &Path) -> Option<EngineConfig> {
 
     match find_file(dir, "config.yaml").await {
         Some(path) => {

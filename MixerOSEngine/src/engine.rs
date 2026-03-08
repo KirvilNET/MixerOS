@@ -1,9 +1,12 @@
 use std::collections::{ HashMap };
+use std::fmt::format;
 use std::sync::{ Arc, Mutex };
 use std::str::FromStr;
-use cpal::{Host, HostId, host_from_id};
+use cpal::traits::HostTrait;
+use cpal::{Host, HostId, StreamConfig, host_from_id};
+use yansi::Paint;
 
-use crate::system::util::{ BitDepth, DASPStatus, SampleRate };
+use crate::system::util::{ BitDepth, ChannelType, DASPStatus, SampleRate, get_sample_rate };
 use crate::router::{ channel, bus };
 
 pub struct Engine {
@@ -12,31 +15,112 @@ pub struct Engine {
   buses: HashMap<usize, Arc<bus::Bus>>,
   bit_depth: BitDepth,
   sample_rate: SampleRate,
+  buffer_size: usize,
   dasp_status: DASPStatus
 }
 
 pub enum EngineError {
   MaxChannels,
-  ChannelDoesNotExist
+  ChannelDoesNotExist,
+  NoDevices
 }
 
 impl Engine {
-  pub fn new(host: Host, ch: usize, buses: usize, bit_depth: BitDepth, sample_rate: SampleRate) -> Self {
-    let channel_strips: HashMap<usize, Arc<channel::ChannelStrip>> = HashMap::with_capacity(ch);
-    let buses: HashMap<usize, Arc<bus::Bus>> = HashMap::with_capacity(buses);
+  pub fn new(host: Host, ch: usize, buses: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize) -> Self {
+    let channel_strips: HashMap<usize, Arc<channel::ChannelStrip>> = HashMap::with_capacity(ch + 2);
+    let buses: HashMap<usize, Arc<bus::Bus>> = HashMap::with_capacity(buses + 3);
 
     Self {
       host, 
       channels: channel_strips, 
       buses, 
       bit_depth,
-      sample_rate, 
+      sample_rate,
+      buffer_size, 
       dasp_status: DASPStatus::STARTING 
     }
   }
 
-  pub fn start(&mut self) {
-    
+  pub fn start(&mut self) -> Result<(), EngineError>{
+    let talkback = channel::ChannelStrip::new("Talkback".to_string(), 
+      1, 
+      ChannelType::USER, 
+      self.sample_rate, 
+      self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+      StreamConfig { channels: 1, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+    );
+
+    let comms = channel::ChannelStrip::new("Talkback".to_string(), 
+      2, 
+      ChannelType::USER, 
+      self.sample_rate, 
+      self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+      StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+    );
+
+    let mains = bus::Bus::new("Talkback".to_string(), 
+      1, 
+      ChannelType::USER, 
+      self.sample_rate, 
+      self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+      StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+    );
+
+    let headphones = bus::Bus::new("Talkback".to_string(), 
+      2, 
+      ChannelType::USER, 
+      self.sample_rate, 
+      self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+      StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+    );
+
+    self.add_bus(1, mains).ok();
+    self.add_bus(2, headphones).ok();
+
+    self.add_channel(1, talkback).ok();
+    self.add_channel(2, comms).ok();
+
+    for ch in 2..self.channels.capacity() {
+      let mut strip = channel::ChannelStrip::new(
+         format!("Channel: {}", ch), 
+         ch, 
+         ChannelType::USER, 
+         self.sample_rate, 
+         self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+         StreamConfig { 
+          channels: 1, 
+          sample_rate: get_sample_rate(self.sample_rate) as u32, 
+          buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) 
+        }
+      );
+
+      let _ = strip.create_input();
+
+      self.add_channel(ch, strip).ok();
+    }
+
+    for bus in 3..self.channels.capacity() {
+      let mut bus_strip = bus::Bus::new(
+        format!("Channel: {}", bus), 
+        bus, 
+        ChannelType::USER, 
+        self.sample_rate, 
+        self.host.default_input_device().ok_or(EngineError::NoDevices)?,  
+        StreamConfig { 
+          channels: 1, 
+          sample_rate: get_sample_rate(self.sample_rate) as u32, 
+          buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) 
+        }
+      );
+
+      self.add_bus(bus, bus_strip).ok();
+    }
+
+    Ok(())
+  }
+
+  pub async fn run(&mut self) {
+    self.channels.iter();
   }
 
   pub fn add_channel(&mut self, channel_number: usize, ch: channel::ChannelStrip) -> Result<(), EngineError> {
@@ -62,6 +146,41 @@ impl Engine {
   }
 
   pub fn get_channel(&mut self, channel: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+    if self.channels.len() == usize::MAX {
+      return Err(EngineError::MaxChannels)
+    }
+
+    let ch = self.channels.get(&channel);
+
+    match ch {
+        Some(x) => Ok(x),
+        None => Err(EngineError::ChannelDoesNotExist),
+    }
+  }
+
+  pub fn add_bus(&mut self, bus_number: usize, bus: bus::Bus) -> Result<(), EngineError> {
+    if self.buses.len() == usize::MAX {
+      return Err(EngineError::MaxChannels)
+    }
+
+    self.buses.insert(bus_number, bus.into()).expect("Could not add Channel");
+    Ok(())
+  }
+
+  pub fn remove_bus(&mut self, channel_number: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+    let channel = self.channels.get(&channel_number);
+    if channel_number > usize::MAX {
+      return Err(EngineError::ChannelDoesNotExist)
+    } 
+
+    match channel {
+        Some(x) => Ok(x),
+        None => Err(EngineError::ChannelDoesNotExist),
+    }
+    
+  }
+
+  pub fn get_bus(&mut self, channel: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
     if self.channels.len() == usize::MAX {
       return Err(EngineError::MaxChannels)
     }

@@ -9,6 +9,10 @@ use crate::system::util::*;
 /// Type alias for boxed modules
 pub type BoxedModule = Box<dyn DASPModule>;
 
+pub enum ModuleManagerError {
+	SamplesNotSameLength
+}
+
 /// The module manager for each channel
 #[derive(Debug, Clone)]
 pub struct ModuleManager {
@@ -20,6 +24,8 @@ pub struct ModuleManager {
 
 		/// Global sample rate
 		sample_rate: SampleRate,
+		
+		output_buff: Vec<f32>
 }
 
 impl ModuleManager {
@@ -27,6 +33,7 @@ impl ModuleManager {
 				Self {
 						modules: HashMap::new(),
 						chain: Vec::new(),
+						output_buff: vec![],
 						sample_rate,
 				}
 		}
@@ -49,52 +56,32 @@ impl ModuleManager {
 				self.modules.get(id).cloned()
 		}
 
-		/// Process a stereo sample through the entire chain
-		pub fn process_chain_stereo(&self, mut left: f32, mut right: f32) -> (f32, f32) {
-				
-			for id in &self.chain {
-				if let Some(processor) = self.modules.get(id) {
-						let mut proc = processor.write();
-						let result = proc.process_stereo(left, right);
-						left = result.0;
-						right = result.1;
-				}
-			}
-			(left, right)
-
-		}
-
 		///Process mono sample through the entire chain
-		pub fn process_chain_mono(&self, mut sample: f32) -> f32 {
+		pub fn process_chain_mono(&self, sample: f32) -> f32 {
+			let mut chain_mono = sample;
 
 			for id in &self.chain {
 				if let Some(processor) = self.modules.get(id) {
 					let mut proc = processor.write();
-					let result = proc.process(sample);
-					sample = result
+					let result = proc.process(chain_mono);
+					
+					chain_mono = result
 				}
 			}
-			sample
+
+			chain_mono
 		}
 
 		/// Process stereo buffers through the entire chain
-		pub fn process_chain_buffer_stereo(&self, left: &mut [f32], right: &mut [f32]) {
-				for id in &self.chain {
-						if let Some(processor) = self.modules.get(id) {
-								let mut proc = processor.write();
-								proc.process_stereo_buffer(left, right);
-						}
-				}
-		}
+		pub fn process_chain_buffer_mono(&self, samples: Vec<f32>) -> Vec<f32> {
+			let mut output: Vec<f32> = Vec::new();
 
-		/// Process stereo buffers through the entire chain
-		pub fn process_chain_buffer_mono(&self, samples: &mut [f32]) {
-				for id in &self.chain {
-						if let Some(processor) = self.modules.get(id) {
-								let mut proc = processor.write();
-								proc.process_buffer(samples);
-						}
-				}
+			for (sampl, data) in samples.iter().enumerate() {
+				let proc_signal = self.process_chain_mono(*data);
+				output.insert(sampl, proc_signal);
+			}
+			
+			output
 		}
 
 		/// Reorder the processing chain

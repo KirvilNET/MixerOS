@@ -13,24 +13,29 @@ use crate::system::StateManager;
 use crate::cli::*;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>>{
-  let rt = Runtime::new().unwrap();
-  let sm = StateManager::new();
-  let config: system::state::EngineConfig = sm.load_config().await.expect("could not load config");
+async fn main() {
+  let mut sm = StateManager::new().await;
+  let mut config: system::state::EngineConfig = Default::default();
+
+  match sm.init().await.ok() {
+    Some(x) => config = x,
+    None => {
+      let _ = sm.create_store().await; 
+    }
+  }
 
   Tui::launch();
 
-  let engine_thread = rt.spawn(async {
-    let host = engine::select_host()
+  if config != system::state::EngineConfig::default() {
+    let engine_thread = tokio::spawn(async move {
+      let host = engine::select_host().unwrap();
 
-    if host.is_err() {
-      panic!("Could not find a compatible host")
-    }
+      let mut proc = engine::Engine::new(host, config.channels, config.bus, config.bit_depth, config.sample_rate, config.buffer_size);
+      let _ = proc.start();
 
-    let proc = engine::Engine::new(host, ch, buses, bit_depth, sample_rate)
-  });
-  
-  
-
-  
+      loop {
+        let _ = proc.run();
+      }
+    });
+  }
 }

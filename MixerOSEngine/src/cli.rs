@@ -5,13 +5,16 @@ pub struct Tui {
 }
 
 const LOGO: &str = include_str!("./ascii/logo.txt");
+const DIVIDER: &str = include_str!("./ascii/divider.txt");
 const VERSION: &str = "1.0.0";
 
 impl Tui {
   pub fn launch() {
-    println!("{}", LOGO);
-    println!("-------------------------------------------------------");
-    println!("v{}", VERSION);
+    println!("{} v{}", LOGO, VERSION);
+    println!("{}", DIVIDER);
+    
+    println!("System Status");
+
   }
 }
 

@@ -1,8 +1,9 @@
 use cpal::traits::DeviceTrait;
-use cpal::{Device, SizedSample, StreamConfig, SupportedInputConfigs};
-use parking_lot;
+use cpal::{BuildStreamError, Device, StreamConfig };
+use parking_lot::{ Mutex };
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::system::util::{ ChannelType, SampleRate };
 use crate::dasp::module_manager::ModuleManager;
@@ -19,14 +20,16 @@ pub struct ChannelStrip {
   gain: i8,
   mute: bool,
   device: Device,
+  buffer: Arc<Mutex<Vec<f32>>>,
   input: Option<Arc<cpal::Stream>>,
   output: Option<Arc<cpal::Stream>>,
-  processor: ModuleManager
+  processor: Arc<Mutex<ModuleManager>>
 }
 
 impl ChannelStrip {
   pub fn new(name: String, id: usize, ch_type: ChannelType, sample_rate: SampleRate, device: Device, config: StreamConfig) -> Self {
     let manager = ModuleManager::new(sample_rate);
+    let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(vec![]));
 
     Self {
       name,
@@ -38,14 +41,53 @@ impl ChannelStrip {
       gain: 0,
       mute: true,
       device,
+      buffer,
       input: None,
       output: None, 
-      processor: manager
+      processor: Arc::new(Mutex::new(manager))
     }
   }
 
-  pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-     Ok(())
+  pub fn create_input(&mut self) -> Result<(), BuildStreamError> {
+    let processor = Arc::clone(&self.processor);
+    let buffer = Arc::clone(&self.buffer);
+
+    let input = self.device.build_input_stream(
+      &self.config, 
+      move | data: &[f32], _: &cpal::InputCallbackInfo | {
+        let output = processor.lock().process_chain_buffer_mono(Vec::from(data));
+        
+        let mut buf = buffer.lock();
+        *buf = output;
+      },  
+      move |_err| {
+      }, 
+      Some(Duration::new(1, 0))
+    ).expect("Could not create input stream");
+
+    self.input = Some(Arc::new(input));
+    Ok(())
+  }
+
+  pub fn create_output(&mut self) -> Result<(), BuildStreamError> {
+    let buffer = Arc::clone(&self.buffer);
+
+    let output = self.device.build_output_stream(
+      &self.config, 
+      move | data: &mut [f32], _: &cpal::OutputCallbackInfo | {
+        let buf = buffer.lock();
+        let len = data.len().min(buf.len());
+        data[..len].copy_from_slice(&buf[..len]);
+        for sample in &mut data[len..] {
+            *sample = 0.0;
+        }
+      }, 
+      move |_err| {}, 
+      Some(Duration::new(1, 0))
+    ).expect("Could not create output stream");
+
+    self.output = Some(Arc::new(output));
+    Ok(())
   }
 
   pub fn get_name(&mut self) -> String { return self.name.clone(); }
@@ -67,7 +109,7 @@ impl ChannelStrip {
 
   pub fn set_name(&mut self, name: String) -> Result<(), ChannelStripError> { 
     if name.len() == 0 || name.len() > 30 {
-      return Err(ChannelStripError::INVALID_NAME)
+      return Err(ChannelStripError::InvalidName)
     }
     self.name = name;
     Ok(())
@@ -75,7 +117,7 @@ impl ChannelStrip {
 
   pub fn set_level(&mut self, level: i8) -> Result<(), ChannelStripError> { 
     if level < 10 || level > -99 {
-      return Err(ChannelStripError::INVALID_LEVEL)
+      return Err(ChannelStripError::InvalidLevel)
     }
     self.level = level;
     Ok(())
@@ -83,7 +125,7 @@ impl ChannelStrip {
 
   pub fn set_gain(&mut self, gain: i8) -> Result<(), ChannelStripError> { 
     if gain < 60 || gain > -20 {
-      return Err(ChannelStripError::INVALID_GAIN)
+      return Err(ChannelStripError::InvalidGain)
     }
     self.gain = gain;
     Ok(())

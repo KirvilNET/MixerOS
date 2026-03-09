@@ -1,10 +1,8 @@
 use std::collections::{ HashMap };
-use std::fmt::format;
-use std::sync::{ Arc, Mutex };
+use std::sync::{ Arc };
 use std::str::FromStr;
 use cpal::traits::HostTrait;
 use cpal::{Host, HostId, StreamConfig, host_from_id};
-use yansi::Paint;
 
 use crate::system::util::{ BitDepth, ChannelType, DASPStatus, SampleRate, get_sample_rate };
 use crate::router::{ channel, bus };
@@ -19,6 +17,7 @@ pub struct Engine {
   dasp_status: DASPStatus
 }
 
+#[derive(Debug)]
 pub enum EngineError {
   MaxChannels,
   ChannelDoesNotExist,
@@ -100,7 +99,7 @@ impl Engine {
     }
 
     for bus in 3..self.channels.capacity() {
-      let mut bus_strip = bus::Bus::new(
+      let bus_strip = bus::Bus::new(
         format!("Channel: {}", bus), 
         bus, 
         ChannelType::USER, 
@@ -112,6 +111,7 @@ impl Engine {
           buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) 
         }
       );
+      
 
       self.add_bus(bus, bus_strip).ok();
     }
@@ -120,7 +120,20 @@ impl Engine {
   }
 
   pub async fn run(&mut self) {
-    self.channels.iter();
+    
+    for (id, channel) in self.channels.iter() {
+        let ch: Arc<channel::ChannelStrip> = Arc::clone(&channel);
+        ch.run().await;
+        println!("Starting Channel {}", id);
+    }
+
+    for (id, buses) in self.buses.iter() {
+        let bus: Arc<bus::Bus> = Arc::clone(&buses);
+        bus.run().await;
+        println!("Starting Bus {}" , id);
+    }
+    
+    self.dasp_status = DASPStatus::ONLINE;
   }
 
   pub fn add_channel(&mut self, channel_number: usize, ch: channel::ChannelStrip) -> Result<(), EngineError> {

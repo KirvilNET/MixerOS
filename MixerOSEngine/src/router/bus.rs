@@ -1,7 +1,10 @@
-use cpal::{Device, SizedSample, StreamConfig, SupportedInputConfigs};
-use num;
+use cpal::traits::{ DeviceTrait, StreamTrait };
+use cpal::{ BuildStreamError, Device, StreamConfig };
 
+use std::collections::HashMap;
+use std::ops::Div;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::dasp::module_manager::ModuleManager;
 use crate::router::error::BusError;
@@ -19,7 +22,7 @@ pub struct Bus {
     gain: i8,
     mute: bool,
     device: Device,
-    input: Option<Arc<cpal::Stream>>,
+    buffer: HashMap<usize, Vec<f32>>,
     output: Option<Arc<cpal::Stream>>,
     processor: ModuleManager,
 }
@@ -34,6 +37,7 @@ impl Bus {
         config: StreamConfig,
     ) -> Self {
         let manager = ModuleManager::new(sample_rate);
+        let buffer = HashMap::new();
 
         Self {
             name,
@@ -45,15 +49,62 @@ impl Bus {
             gain: 0,
             mute: true,
             device,
-            input: None,
+            buffer,
             output: None,
             processor: manager,
         }
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-      
-      Ok(())
+    pub fn create_output(&mut self) -> Result<(), BuildStreamError> {
+        let buffer = self.output();
+
+        let output = self.device.build_output_stream(
+          &self.config, 
+          move | data: &mut [f32], _: &cpal::OutputCallbackInfo | {
+            let len = data.len().min(buffer.len());
+            data[..len].copy_from_slice(&buffer[..len]);
+            for sample in &mut data[len..] {
+                *sample = 0.0;
+            }
+          }, 
+          move |err| {
+            eprintln!("an error occurred on stream: {}", err);
+          }, 
+          Some(Duration::new(1, 0))
+        ).expect("Could not create output stream");
+
+        self.output = Some(Arc::new(output));
+        Ok(())
+    }
+
+    fn output(&mut self) -> Vec<f32> {
+        let mut output: Vec<f32> = Vec::new();
+
+        for id in self.buffer.keys() {
+            match self.buffer.get(id) {
+                Some(data) => {
+                    output = output.iter().zip(data.iter())
+                        .map(|(&o, &d)| (o + d).div(*id as f32))
+                        .collect();
+                },
+                None => {
+
+                }
+            }
+        }
+
+        output
+        
+    }
+
+
+    pub async fn run(&self) {
+        let output = Arc::clone(&self.output.as_ref().unwrap());
+        output.play().unwrap();
+    }
+
+    pub fn add_input(&mut self, id: usize, source: Vec<f32>) {
+        self.buffer.insert(id, source);
     }
 
     pub fn get_name(&mut self) -> String {
@@ -67,20 +118,6 @@ impl Bus {
     }
     pub fn get_mute(&mut self) -> bool {
         return self.mute;
-    }
-
-    pub fn get_input(&self) -> &Option<Arc<cpal::Stream>> {
-        return &self.input;
-    }
-
-    pub fn set_input(&mut self, input: cpal::Stream) -> Result<(), BusError> {
-        self.input = Some(Arc::new(input));
-        Ok(())
-    }
-
-    pub fn set_output(&mut self, output: cpal::Stream) -> Result<(), BusError> {
-        self.output = Some(Arc::new(output));
-        Ok(())
     }
 
     pub fn set_name(&mut self, name: String) -> Result<(), BusError> {

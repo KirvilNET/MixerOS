@@ -10,7 +10,7 @@ pub struct StateManager {
   config: Arc<Mutex<EngineConfig>>
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct EngineConfig {
   pub name: String,
   pub channels: usize,
@@ -18,6 +18,7 @@ pub struct EngineConfig {
   pub bit_depth: BitDepth,
   pub sample_rate: SampleRate,
   pub buffer_size: usize,
+  pub ws_port: usize,
   config_path: String
 }
 
@@ -35,13 +36,14 @@ impl Default for EngineConfig {
       bit_depth: BitDepth::BIT32,
       sample_rate: SampleRate::Hz48000,
       buffer_size: 512,
+      ws_port: 3000,
       config_path: " ".to_string()
     }
   }
 }
 
 impl EngineConfig {
-  fn new(name: String, channels: usize, bus: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize) -> Self {
+  fn new(name: String, channels: usize, bus: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize, port: usize) -> Self {
 
     Self {
       name,
@@ -50,6 +52,7 @@ impl EngineConfig {
       bit_depth,
       sample_rate,
       buffer_size,
+      ws_port: port,
       config_path: " ".to_string()
     }
   }

@@ -1,4 +1,4 @@
-use cpal::traits::DeviceTrait;
+use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{BuildStreamError, Device, StreamConfig };
 use parking_lot::{ Mutex };
 
@@ -22,7 +22,6 @@ pub struct ChannelStrip {
   device: Device,
   buffer: Arc<Mutex<Vec<f32>>>,
   input: Option<Arc<cpal::Stream>>,
-  output: Option<Arc<cpal::Stream>>,
   processor: Arc<Mutex<ModuleManager>>
 }
 
@@ -42,8 +41,7 @@ impl ChannelStrip {
       mute: true,
       device,
       buffer,
-      input: None,
-      output: None, 
+      input: None, 
       processor: Arc::new(Mutex::new(manager))
     }
   }
@@ -60,34 +58,20 @@ impl ChannelStrip {
         let mut buf = buffer.lock();
         *buf = output;
       },  
-      move |_err| {
+      move |err| {
+        eprintln!("an error occurred on stream: {}", err);
       }, 
       Some(Duration::new(1, 0))
     ).expect("Could not create input stream");
 
+    
     self.input = Some(Arc::new(input));
     Ok(())
   }
 
-  pub fn create_output(&mut self) -> Result<(), BuildStreamError> {
-    let buffer = Arc::clone(&self.buffer);
-
-    let output = self.device.build_output_stream(
-      &self.config, 
-      move | data: &mut [f32], _: &cpal::OutputCallbackInfo | {
-        let buf = buffer.lock();
-        let len = data.len().min(buf.len());
-        data[..len].copy_from_slice(&buf[..len]);
-        for sample in &mut data[len..] {
-            *sample = 0.0;
-        }
-      }, 
-      move |_err| {}, 
-      Some(Duration::new(1, 0))
-    ).expect("Could not create output stream");
-
-    self.output = Some(Arc::new(output));
-    Ok(())
+  pub async fn run(&self) {
+    let input = Arc::clone(&self.input.as_ref().unwrap());
+    input.play();
   }
 
   pub fn get_name(&mut self) -> String { return self.name.clone(); }
@@ -101,11 +85,6 @@ impl ChannelStrip {
     self.input = Some(Arc::new(input));
     Ok(())
   }
-
-  pub fn set_output(&mut self, output: cpal::Stream) -> Result<(), ChannelStripError> {
-    self.output = Some(Arc::new(output));
-    Ok(())
-  } 
 
   pub fn set_name(&mut self, name: String) -> Result<(), ChannelStripError> { 
     if name.len() == 0 || name.len() > 30 {

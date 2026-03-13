@@ -4,7 +4,13 @@
 			"path": "."
 		},
 		{
-			"path": "../aes67-rs"
+			"path": "MixerOSEngine"
+		},
+		{
+			"path": "MixerOS"
+		},
+		{
+			"path": "Linux"
 		}
 	],
 	"settings": {

@@ -1,5 +1,4 @@
 #[derive(Debug)]
-
 pub enum ChannelStripError {
   InvalidName,
   InvalidLevel,
@@ -9,6 +8,7 @@ pub enum ChannelStripError {
   StreamError
 }
 
+#[derive(Debug)]
 pub enum BusError {
   InvalidName,
   InvalidLevel,

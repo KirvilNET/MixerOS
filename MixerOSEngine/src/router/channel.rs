@@ -1,6 +1,6 @@
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{BuildStreamError, Device, StreamConfig };
-use parking_lot::{ Mutex };
+use tokio::sync::{ RwLock };
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,15 +20,15 @@ pub struct ChannelStrip {
   gain: i8,
   mute: bool,
   device: Device,
-  buffer: Arc<Mutex<Vec<f32>>>,
-  input: Option<Arc<cpal::Stream>>,
-  processor: Arc<Mutex<ModuleManager>>
+  buffer: Arc<std::sync::RwLock<Vec<f32>>>,
+  input: Option<Arc<RwLock<cpal::Stream>>>,
+  processor: Arc<std::sync::RwLock<ModuleManager>>
 }
 
 impl ChannelStrip {
   pub fn new(name: String, id: usize, ch_type: ChannelType, sample_rate: SampleRate, device: Device, config: StreamConfig) -> Self {
     let manager = ModuleManager::new(sample_rate);
-    let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(vec![]));
+    let buffer: Arc<std::sync::RwLock<Vec<f32>>> = Arc::new(std::sync::RwLock::new(vec![]));
 
     Self {
       name,
@@ -42,21 +42,22 @@ impl ChannelStrip {
       device,
       buffer,
       input: None, 
-      processor: Arc::new(Mutex::new(manager))
+      processor: Arc::new(std::sync::RwLock::new(manager))
     }
   }
 
-  pub fn create_input(&mut self) -> Result<(), BuildStreamError> {
+  pub async fn create_input(&mut self) -> Result<(), BuildStreamError> {
     let processor = Arc::clone(&self.processor);
-    let buffer = Arc::clone(&self.buffer);
+    let mut buffer: Vec<f32> = Arc::clone(&self.buffer).write().unwrap().to_vec();
 
     let input = self.device.build_input_stream(
       &self.config, 
       move | data: &[f32], _: &cpal::InputCallbackInfo | {
-        let output = processor.lock().process_chain_buffer_mono(Vec::from(data));
+        let output = processor.write().unwrap().process_chain_buffer_mono(Vec::from(data));
         
-        let mut buf = buffer.lock();
-        *buf = output;
+        
+        buffer.clear();
+        buffer = output.to_vec();
       },  
       move |err| {
         eprintln!("an error occurred on stream: {}", err);
@@ -65,13 +66,16 @@ impl ChannelStrip {
     ).expect("Could not create input stream");
 
     
-    self.input = Some(Arc::new(input));
+    self.input = Some(Arc::new(RwLock::new(input)));
     Ok(())
   }
 
-  pub async fn run(&self) {
+  pub async fn run(&mut self) {
     let input = Arc::clone(&self.input.as_ref().unwrap());
-    input.play();
+    match input.write().await.play() {
+        Ok(_) => println!("initilized the channel {}", self.get_name()),
+        Err(_) => println!("failed to initialize channel {}", self.get_name()),
+    };
   }
 
   pub fn get_name(&mut self) -> String { return self.name.clone(); }
@@ -79,10 +83,13 @@ impl ChannelStrip {
   pub fn get_gain(&mut self) -> i8 { return self.gain; }
   pub fn get_mute(&mut self) -> bool { return self.mute; }
 
-  pub fn get_input(&self) -> &Option<Arc<cpal::Stream>> { return &self.input }
+  pub async fn get_input(&mut self) -> Option<Arc<RwLock<cpal::Stream>>> { 
+    let input: Arc<RwLock<cpal::Stream>> = Arc::clone(&self.input.as_mut().unwrap());
+    return Some(input);
+  }
 
   pub fn set_input(&mut self, input: cpal::Stream) -> Result<(), ChannelStripError> {
-    self.input = Some(Arc::new(input));
+    self.input = Some(Arc::new(RwLock::new(input)));
     Ok(())
   }
 

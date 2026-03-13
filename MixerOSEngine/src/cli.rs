@@ -1,7 +1,7 @@
 use crate::system::state::EngineConfig;
 use neofetch::*;
-use serde::de::value;
 use yansi::Paint;
+
 pub struct Tui {
   config: EngineConfig
 }
@@ -33,7 +33,6 @@ impl Tui {
     let fetch = Neofetch::new().await;
 
     if let Some((user, hname)) = fetch.user.ok().zip(fetch.hostname.ok()) {
-
       println!("{}@{}", user.rgb(140, 82, 255), hname.rgb(140, 82, 255));
     } 
 
@@ -43,16 +42,22 @@ impl Tui {
 
     if let Some(val) = fetch.cpu.ok() {
       println!("CPU: {}", val.to_string());
-    } 
+    } else {
+      println!("No CPU found").red();
+    }
 
     if let Some(val) = fetch.memory.ok() {
       println!("Memory: {}", val.to_string());
+    } else {
+      println!("No memory found").red();
     }
 
     if let Some(val) = fetch.gpu {
       for (id, gpu) in val.iter().enumerate() {
         println!("GPU{}: {}", id, gpu);
       } 
+    } else {
+      println!("No GPU found").red();
     }
 
     if let Some(val) = fetch.network.ok() {

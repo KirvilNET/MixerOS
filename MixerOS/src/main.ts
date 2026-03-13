@@ -12,14 +12,12 @@ import "./main.css";
 
 import navbar from "./components/nav/navbar.vue";
 import statusbar from "./components/nav/statusbar.vue";
-import appmenu from "./components/nav/appmenu.vue";
 
 const app = createApp(App);
 const pinia = createPinia();
 
 app.component('navbar', navbar)
 app.component('statusbar', statusbar)
-app.component('appmenu', appmenu)
 
 pinia.use(createPlugin());
 

@@ -106,7 +106,7 @@
             <h1 class="text-4xl text-white">00:00:00:00</h1>
           </div>
         </div>
-        <div class="flex flex-col items-center mr-12 text-white">
+        <div class="flex flex-col items-left mr-12 text-white">
           <p>
             Active Show: <span class="text-gray"></span>
           </p>

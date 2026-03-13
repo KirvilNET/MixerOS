@@ -25,7 +25,6 @@ pub struct ModuleManager {
 		/// Global sample rate
 		sample_rate: SampleRate,
 		
-		output_buff: Vec<f32>
 }
 
 impl ModuleManager {
@@ -33,7 +32,6 @@ impl ModuleManager {
 				Self {
 						modules: HashMap::new(),
 						chain: Vec::new(),
-						output_buff: vec![],
 						sample_rate,
 				}
 		}

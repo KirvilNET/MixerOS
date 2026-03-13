@@ -1,16 +1,18 @@
 use std::collections::{ HashMap };
 use std::sync::{ Arc };
 use std::str::FromStr;
+use cpal::platform::JackHost;
 use cpal::traits::HostTrait;
-use cpal::{Host, HostId, StreamConfig, host_from_id};
+use cpal::{Device, Host, HostId, StreamConfig, host_from_id};
+use tokio::sync::RwLock;
 
 use crate::system::util::{ BitDepth, ChannelType, DASPStatus, SampleRate, get_sample_rate };
 use crate::router::{ channel, bus };
 
 pub struct Engine {
   host: Host,
-  channels: HashMap<usize, Arc<channel::ChannelStrip>>,
-  buses: HashMap<usize, Arc<bus::Bus>>,
+  channels: HashMap<usize, Arc<RwLock<channel::ChannelStrip>>>,
+  buses: HashMap<usize, Arc<RwLock<bus::Bus>>>,
   bit_depth: BitDepth,
   sample_rate: SampleRate,
   buffer_size: usize,
@@ -26,11 +28,11 @@ pub enum EngineError {
 
 impl Engine {
   pub fn new(host: Host, ch: usize, buses: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize) -> Self {
-    let channel_strips: HashMap<usize, Arc<channel::ChannelStrip>> = HashMap::with_capacity(ch + 2);
-    let buses: HashMap<usize, Arc<bus::Bus>> = HashMap::with_capacity(buses + 3);
+    let channel_strips: HashMap<usize, Arc<RwLock<channel::ChannelStrip>>> = HashMap::with_capacity(ch + 2);
+    let buses: HashMap<usize, Arc<RwLock<bus::Bus>>> = HashMap::with_capacity(buses + 3);
 
     Self {
-      host, 
+      host,
       channels: channel_strips, 
       buses, 
       bit_depth,
@@ -54,14 +56,14 @@ impl Engine {
       ChannelType::USER, 
       self.sample_rate, 
       self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
-      StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+      StreamConfig { channels: 1, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
     );
 
     let mains = bus::Bus::new("Talkback".to_string(), 
       1, 
       ChannelType::USER, 
       self.sample_rate, 
-      self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+      self.host.default_output_device().ok_or(EngineError::NoDevices)?, 
       StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
     );
 
@@ -69,7 +71,7 @@ impl Engine {
       2, 
       ChannelType::USER, 
       self.sample_rate, 
-      self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
+      self.host.default_output_device().ok_or(EngineError::NoDevices)?, 
       StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
     );
 
@@ -122,15 +124,18 @@ impl Engine {
   pub async fn run(&mut self) {
     
     for (id, channel) in self.channels.iter() {
-        let ch: Arc<channel::ChannelStrip> = Arc::clone(&channel);
-        ch.run().await;
-        println!("Starting Channel {}", id);
+        let ch = Arc::clone(channel);
+
+        println!("Starting Bus {}" , id);
+        ch.write().await.run().await;
     }
 
     for (id, buses) in self.buses.iter() {
-        let bus: Arc<bus::Bus> = Arc::clone(&buses);
-        bus.run().await;
+        let bus: Arc<RwLock<bus::Bus>> = Arc::clone(&buses);
+
         println!("Starting Bus {}" , id);
+        bus.write().await.run().await;
+        
     }
     
     self.dasp_status = DASPStatus::ONLINE;
@@ -141,11 +146,11 @@ impl Engine {
       return Err(EngineError::MaxChannels)
     }
 
-    self.channels.insert(channel_number, ch.into()).expect("Could not add Channel");
+    self.channels.insert(channel_number, Arc::new(RwLock::new(ch))).expect("Could not add Channel");
     Ok(())
   }
 
-  pub fn remove_channel(&mut self, channel_number: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+  pub fn remove_channel(&mut self, channel_number: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     let channel = self.channels.get(&channel_number);
     if channel_number > usize::MAX {
       return Err(EngineError::ChannelDoesNotExist)
@@ -158,7 +163,7 @@ impl Engine {
     
   }
 
-  pub fn get_channel(&mut self, channel: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+  pub fn get_channel(&mut self, channel: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     if self.channels.len() == usize::MAX {
       return Err(EngineError::MaxChannels)
     }
@@ -176,11 +181,11 @@ impl Engine {
       return Err(EngineError::MaxChannels)
     }
 
-    self.buses.insert(bus_number, bus.into()).expect("Could not add Channel");
+    self.buses.insert(bus_number, Arc::new(RwLock::new(bus))).expect("Could not add Channel");
     Ok(())
   }
 
-  pub fn remove_bus(&mut self, channel_number: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+  pub fn remove_bus(&mut self, channel_number: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     let channel = self.channels.get(&channel_number);
     if channel_number > usize::MAX {
       return Err(EngineError::ChannelDoesNotExist)
@@ -193,7 +198,7 @@ impl Engine {
     
   }
 
-  pub fn get_bus(&mut self, channel: usize) -> Result<&Arc<channel::ChannelStrip>, EngineError> {
+  pub fn get_bus(&mut self, channel: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     if self.channels.len() == usize::MAX {
       return Err(EngineError::MaxChannels)
     }
@@ -206,11 +211,11 @@ impl Engine {
     }
   }
 
-  pub fn get_channels(&mut self) -> HashMap<usize, Arc<channel::ChannelStrip>> {
+  pub fn get_channels(&mut self) -> HashMap<usize, Arc<RwLock<channel::ChannelStrip>>> {
     self.channels.clone()
   }
 
-  pub fn get_buses(&mut self) -> HashMap<usize, Arc<bus::Bus>> {
+  pub fn get_buses(&mut self) -> HashMap<usize, Arc<RwLock<bus::Bus>>> {
     self.buses.clone()
   }
 }

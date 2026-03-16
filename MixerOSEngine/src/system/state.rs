@@ -35,7 +35,7 @@ impl Default for EngineConfig {
       bus: 2,
       bit_depth: BitDepth::BIT32,
       sample_rate: SampleRate::Hz48000,
-      buffer_size: 512,
+      buffer_size: 1024,
       ws_port: 3000,
       config_path: " ".to_string()
     }

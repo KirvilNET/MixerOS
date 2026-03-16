@@ -1,31 +1,24 @@
-use std::fmt::Debug;
+use std::{fmt::Debug};
 
-use crate::dasp::dasp_modules::module_param::{ ParameterDescriptor };
+use crate::dasp::processor::gpu::gpu;
+use crate::dasp::processor::cpu::cpu;
+
+use std::sync::Arc;
 
 /// Core trait that all DSP processors must implement
 pub trait DASPModule: Send + Sync + Debug {
-		/// Process a single mono sample
-		fn process(&mut self, input: f32) -> f32 {
-				input // Default: pass-through
-		}
+	fn register(&mut self, device: ash::Device, queue_family_index: u32);
 
-		/// Process a buffer of mono samples
-		/// 
-		/// Override this for block-based processing (e.g., FFT-based effects, convolution)
-		fn process_buffer(&mut self, buffer: &[f32]) -> Vec<f32> {
+	/// Process the audio buffer on the GPU
+	fn process_gpu(&mut self, input: Vec<f32>, gpu: Arc<gpu::GPU>) -> Vec<f32>;
 
-			let mut out: Vec<f32> = Vec::with_capacity(buffer.len());
+	/// Process the audio buffer on the CPU
+	fn process_cpu(&mut self, input: Vec<f32>, cpu: Arc<cpu::CPU>) -> Vec<f32>;
 
-			for sample in buffer.iter() {
-					let proc_smpl = self.process(*sample);
-					out.push(proc_smpl);
-			}
+	fn update(&mut self);
 
-			return out
-		}
-
-		/// Reset internal state (called when playback starts/stops, or when parameters change drastically)
-		fn reset(&mut self);
+	/// Reset internal state (called when playback starts/stops, or when parameters change drastically)
+	fn reset(&mut self);
 }
 
 /// Trait for processors that provide metering/analysis data
@@ -48,15 +41,6 @@ pub trait Latency {
 		fn get_latency_ms(&self, sample_rate: f32) -> f32 {
 				self.get_latency_samples() as f32 / sample_rate * 1000.0
 		}
-}
-
-/// Trait for processors that can be bypassed
-pub trait Bypassable {
-		/// Check if processor is bypassed
-		fn is_bypassed(&self) -> bool;
-
-		/// Set bypass state
-		fn set_bypassed(&mut self, bypassed: bool);
 }
  
 /// Metering data

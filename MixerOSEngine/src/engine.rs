@@ -1,13 +1,14 @@
 use std::collections::{ HashMap };
 use std::sync::{ Arc };
 use std::str::FromStr;
-use cpal::platform::JackHost;
 use cpal::traits::HostTrait;
-use cpal::{Device, Host, HostId, StreamConfig, host_from_id};
+use cpal::{ Host, HostId, host_from_id};
 use tokio::sync::RwLock;
 
-use crate::system::util::{ BitDepth, ChannelType, DASPStatus, SampleRate, get_sample_rate };
+use crate::dasp::processor::gpu::boilerplate::VKbase;
+use crate::system::util::{ BitDepth, ChannelType, DASPStatus, SampleRate };
 use crate::router::{ channel, bus };
+use crate::dasp::processor::processor::*;
 
 pub struct Engine {
   host: Host,
@@ -16,20 +17,32 @@ pub struct Engine {
   bit_depth: BitDepth,
   sample_rate: SampleRate,
   buffer_size: usize,
-  dasp_status: DASPStatus
+  dasp_status: DASPStatus,
+  processor_def: Processor
 }
 
 #[derive(Debug)]
 pub enum EngineError {
   MaxChannels,
   ChannelDoesNotExist,
-  NoDevices
+  NoDevices,
+  NoGPU,
 }
 
 impl Engine {
   pub fn new(host: Host, ch: usize, buses: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize) -> Self {
-    let channel_strips: HashMap<usize, Arc<RwLock<channel::ChannelStrip>>> = HashMap::with_capacity(ch + 2);
-    let buses: HashMap<usize, Arc<RwLock<bus::Bus>>> = HashMap::with_capacity(buses + 3);
+    let channel_strips: HashMap<usize, Arc<RwLock<channel::ChannelStrip>>> = HashMap::with_capacity(ch);
+    let buses: HashMap<usize, Arc<RwLock<bus::Bus>>> = HashMap::with_capacity(buses);
+    let processor_def: Processor;
+
+    match Self::dertermine_processor() {
+        ProcessorType::CPU => {
+          processor_def = Processor { processor_type: ProcessorType::CPU, processor: ProcessorUnit::CPU(Processor::create_cpu_processor(ch as u32, buffer_size as u32))}
+        },
+        ProcessorType::GPU => {
+          processor_def = Processor { processor_type: ProcessorType::GPU, processor: ProcessorUnit::GPU(Processor::create_gpu_processor(ch as u32, buffer_size as u32))}
+        },
+    }
 
     Self {
       host,
@@ -38,45 +51,78 @@ impl Engine {
       bit_depth,
       sample_rate,
       buffer_size, 
-      dasp_status: DASPStatus::STARTING 
+      dasp_status: DASPStatus::STARTING,
+      processor_def
     }
   }
 
-  pub fn start(&mut self) -> Result<(), EngineError>{
-    let talkback = channel::ChannelStrip::new("Talkback".to_string(), 
+  fn init(&mut self) -> Result<(), EngineError>{
+
+    let talkback = channel::ChannelStrip::new(
+      "Talkback".to_string(), 
       1, 
       ChannelType::USER, 
       self.sample_rate, 
       self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
-      StreamConfig { channels: 1, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+      self.buffer_size as u32,
+      self.processor_def.clone()
     );
 
-    let comms = channel::ChannelStrip::new("Talkback".to_string(), 
+    let comms = channel::ChannelStrip::new(
+      "Comms".to_string(), 
       2, 
       ChannelType::USER, 
       self.sample_rate, 
       self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
-      StreamConfig { channels: 1, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+      self.buffer_size as u32,
+      self.processor_def.clone()
     );
 
-    let mains = bus::Bus::new("Talkback".to_string(), 
+    let mains_l = bus::Bus::new(
+      "Mains Left".to_string(), 
       1, 
       ChannelType::USER, 
       self.sample_rate, 
       self.host.default_output_device().ok_or(EngineError::NoDevices)?, 
-      StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+      self.buffer_size as u32,
+      self.processor_def.clone()
     );
 
-    let headphones = bus::Bus::new("Talkback".to_string(), 
+    let mains_r = bus::Bus::new(
+      "Mains Right".to_string(), 
+      1, 
+      ChannelType::USER, 
+      self.sample_rate, 
+      self.host.default_output_device().ok_or(EngineError::NoDevices)?, 
+      self.buffer_size as u32,
+      self.processor_def.clone()
+    );
+
+    let monitor_l = bus::Bus::new(
+      "Monitor Left".to_string(), 
       2, 
       ChannelType::USER, 
       self.sample_rate, 
       self.host.default_output_device().ok_or(EngineError::NoDevices)?, 
-      StreamConfig { channels: 2, sample_rate: get_sample_rate(self.sample_rate) as u32, buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) }
+      self.buffer_size as u32,
+      self.processor_def.clone()
     );
 
-    self.add_bus(1, mains).ok();
-    self.add_bus(2, headphones).ok();
+    let monitor_r = bus::Bus::new(
+      "Monitor Right".to_string(), 
+      2, 
+      ChannelType::USER, 
+      self.sample_rate, 
+      self.host.default_output_device().ok_or(EngineError::NoDevices)?, 
+      self.buffer_size as u32,
+      self.processor_def.clone()
+    );
+
+    self.add_bus(1, mains_l).ok();
+    self.add_bus(2, monitor_l).ok();
+
+    self.add_bus(1, mains_r).ok();
+    self.add_bus(2, monitor_r).ok();
 
     self.add_channel(1, talkback).ok();
     self.add_channel(2, comms).ok();
@@ -88,11 +134,8 @@ impl Engine {
          ChannelType::USER, 
          self.sample_rate, 
          self.host.default_input_device().ok_or(EngineError::NoDevices)?, 
-         StreamConfig { 
-          channels: 1, 
-          sample_rate: get_sample_rate(self.sample_rate) as u32, 
-          buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) 
-        }
+         self.buffer_size as u32,
+         self.processor_def.clone()
       );
 
       let _ = strip.create_input();
@@ -107,11 +150,8 @@ impl Engine {
         ChannelType::USER, 
         self.sample_rate, 
         self.host.default_input_device().ok_or(EngineError::NoDevices)?,  
-        StreamConfig { 
-          channels: 1, 
-          sample_rate: get_sample_rate(self.sample_rate) as u32, 
-          buffer_size: cpal::BufferSize::Fixed(self.buffer_size as u32) 
-        }
+        self.buffer_size as u32,
+        self.processor_def.clone()
       );
       
 
@@ -121,22 +161,26 @@ impl Engine {
     Ok(())
   }
 
+  fn dertermine_processor() -> ProcessorType {
+    let processor_type: ProcessorType;
+
+    match VKbase::check() {
+        Ok(_) => {
+          processor_type = ProcessorType::GPU;
+        },
+        Err(_) => {
+          processor_type = ProcessorType::CPU;
+        },
+    }
+
+    processor_type
+  }
+
+  pub fn start(&mut self) -> Result<(), EngineError> {
+    Engine::init(self)
+  }
+
   pub async fn run(&mut self) {
-    
-    for (id, channel) in self.channels.iter() {
-        let ch = Arc::clone(channel);
-
-        println!("Starting Bus {}" , id);
-        ch.write().await.run().await;
-    }
-
-    for (id, buses) in self.buses.iter() {
-        let bus: Arc<RwLock<bus::Bus>> = Arc::clone(&buses);
-
-        println!("Starting Bus {}" , id);
-        bus.write().await.run().await;
-        
-    }
     
     self.dasp_status = DASPStatus::ONLINE;
   }
@@ -146,7 +190,7 @@ impl Engine {
       return Err(EngineError::MaxChannels)
     }
 
-    self.channels.insert(channel_number, Arc::new(RwLock::new(ch))).expect("Could not add Channel");
+    self.channels.insert(channel_number, Arc::new(RwLock::new(ch)));
     Ok(())
   }
 
@@ -181,7 +225,9 @@ impl Engine {
       return Err(EngineError::MaxChannels)
     }
 
-    self.buses.insert(bus_number, Arc::new(RwLock::new(bus))).expect("Could not add Channel");
+    let bus = Arc::new(RwLock::new(bus));
+
+    self.buses.insert(bus_number, bus);
     Ok(())
   }
 

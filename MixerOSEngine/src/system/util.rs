@@ -16,7 +16,7 @@ pub enum SampleRate {
   Hz192000 = 192000
 }
 
-pub fn get_sample_rate(rate: SampleRate) -> i32 {
+pub fn get_sample_rate(rate: SampleRate) -> u32 {
   match rate {
     SampleRate::Hz44100 => 44100,
     SampleRate::Hz48000 => 48000,
@@ -34,7 +34,7 @@ pub enum DASPStatus {
   FAULT
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum ChannelType {
   USER,
   SYSTEM,

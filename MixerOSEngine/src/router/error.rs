@@ -5,7 +5,10 @@ pub enum ChannelStripError {
   InvalidGain,
   InvalidInput,
   InvalidOutput,
-  StreamError
+  NoInput,
+  InputError,
+  StreamError,
+  SystemChannel
 }
 
 #[derive(Debug)]
@@ -15,4 +18,5 @@ pub enum BusError {
   InvalidGain,
   InvalidInput,
   InvalidOutput,
+  NoOutput,
 }

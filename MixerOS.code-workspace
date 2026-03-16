@@ -1,23 +1,29 @@
 {
 	"folders": [
 		{
+			"name": "Root",
 			"path": "."
 		},
 		{
+			"name": "MixerOS Engine",
 			"path": "MixerOSEngine"
 		},
 		{
+			"name": "MixerOS UI",
 			"path": "MixerOS"
 		},
 		{
+			"name": "Linux",
 			"path": "Linux"
 		}
 	],
 	"settings": {
 		"rust-analyzer.linkedProjects": [
-			"../aes67-rs/Cargo.toml",
 			"./MixerOSEngine/Cargo.toml",
 			"./MixerOS/src-tauri/Cargo.toml"
+		],
+		"glsllint.glslangValidatorArgs": [
+			"-V"
 		]
 
 	},

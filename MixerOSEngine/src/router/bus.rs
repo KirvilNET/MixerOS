@@ -10,6 +10,7 @@ use crate::dasp::module_manager::ModuleManager;
 use crate::router::error::BusError;
 use crate::system::util::*;
 use crate::system::util::{ChannelType, SampleRate};
+use crate::dasp::processor::processor::*;
 
 #[derive(Clone)]
 pub struct Bus {
@@ -28,16 +29,26 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(
-        name: String,
-        id: usize,
-        ch_type: ChannelType,
-        sample_rate: SampleRate,
-        device: Device,
-        config: StreamConfig,
-    ) -> Self {
-        let manager = ModuleManager::new(sample_rate);
+    pub fn new( name: String, id: usize, ch_type: ChannelType, sample_rate: SampleRate, device: Device, buffer_size: u32, proc: Processor) -> Self {
+        let manager = ModuleManager::new(proc);
         let buffer = HashMap::new();
+
+        let supported_config = device.supported_input_configs().expect("Error while quering configs").next().expect("No avalible configs");
+        let mut rate: u32 = 0;
+
+        if get_sample_rate(sample_rate) < supported_config.max_sample_rate() {
+          println!("Requested Sample Rate is higher than the max sample rate of the device ({})", supported_config.max_sample_rate());
+          rate = supported_config.max_sample_rate();
+        } else if get_sample_rate(sample_rate) < supported_config.min_sample_rate(){
+          println!("Requested Sample rate is lower than the minimum sample rate of the device ({})", supported_config.min_sample_rate());
+          rate = supported_config.min_sample_rate();
+        }
+
+        let config = StreamConfig { 
+          channels: 1, 
+          sample_rate: rate, 
+          buffer_size: cpal::BufferSize::Fixed(buffer_size),
+        };
 
         Self {
             name,
@@ -98,9 +109,14 @@ impl Bus {
     }
 
 
-    pub async fn run(&self) {
+    pub async fn run(&self) -> Result<(), BusError> {
+        if self.output.is_none() {
+            return Err(BusError::NoOutput)
+        }
+
         let output = Arc::clone(&self.output.as_ref().unwrap());
         output.play().unwrap();
+        return Ok(())
     }
 
     pub fn add_input(&mut self, id: usize, source: Vec<f32>) {
@@ -148,5 +164,9 @@ impl Bus {
         if self.mute != mute {
             self.mute = mute;
         }
+    }
+
+    pub fn set_status(&mut self, status: DASPStatus) {
+        self.status = status;
     }
 }

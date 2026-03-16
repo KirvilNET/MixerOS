@@ -7,16 +7,24 @@ edition = "2024"
 cpal = {version = "0.17.3", features = ["audio_thread_priority", "jack"]}
 num = "0.4.3"
 dasp = { version = "0.11", features = ["signal", "interpolate"] }
+
 anyhow = "1.0"
-tokio = { version = "1.50.0", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1"
-yaml_serde = "0.10.4"
 ringbuf = "0.4.8"
 atomic_float = "1.1.0"
 parking_lot = "0.12.5"
-cubecl = "0.9.0"
+
+# TUI libs
 yansi = "1.0.1"
 neofetch = "0.2.0"
-socketioxide = "0.18.2"
+
+# net libs
 axum = "0.8.8"
+serde = { version = "1.0", features = ["derive"] }
+yaml_serde = "0.10.4"
+serde_json = "1"
+tokio = { version = "1.50.0", features = ["full"] }
+
+# compute
+ash = { version = "0.38.0", features = ["linked"] }
+gpu-allocator = "0.28.0"
+bytemuck = { version = "1", features = ["derive"] }

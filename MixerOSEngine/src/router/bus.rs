@@ -1,10 +1,10 @@
-use cpal::traits::{ DeviceTrait, StreamTrait };
-use cpal::{ BuildStreamError, Device, StreamConfig };
+use jack::{ AudioIn, AudioOut, Client, ClientOptions, AsyncClient, ProcessScope, Control };
+use jack::Port;
+use jack::contrib::ClosureProcessHandler;
 
-use std::collections::HashMap;
-use std::ops::Div;
+use core::slice;
 use std::sync::Arc;
-use std::time::Duration;
+
 
 use crate::dasp::module_manager::ModuleManager;
 use crate::router::error::BusError;
@@ -12,115 +12,73 @@ use crate::system::util::*;
 use crate::system::util::{ChannelType, SampleRate};
 use crate::dasp::processor::processor::*;
 
-#[derive(Clone)]
 pub struct Bus {
     name: String,
     status: DASPStatus,
-    config: StreamConfig,
+    jack: Option<AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send>>>>,
     id: usize,
     ch_type: ChannelType,
     level: i8,
     gain: i8,
     mute: bool,
-    device: Device,
-    buffer: HashMap<usize, Vec<f32>>,
-    output: Option<Arc<cpal::Stream>>,
-    processor: ModuleManager,
+    input: Option<Port<AudioIn>>,
+    output: Option<Port<AudioOut>>,
+    processor: Arc<std::sync::RwLock<ModuleManager>>,
 }
 
 impl Bus {
-    pub fn new( name: String, id: usize, ch_type: ChannelType, sample_rate: SampleRate, device: Device, buffer_size: u32, proc: Processor) -> Self {
+    pub fn new(name: String, id: usize, ch_type: ChannelType, sample_rate: SampleRate, buffer_size: u32, proc: Processor) -> Self {
         let manager = ModuleManager::new(proc);
-        let buffer = HashMap::new();
-
-        let supported_config = device.supported_input_configs().expect("Error while quering configs").next().expect("No avalible configs");
-        let mut rate: u32 = 0;
-
-        if get_sample_rate(sample_rate) < supported_config.max_sample_rate() {
-          println!("Requested Sample Rate is higher than the max sample rate of the device ({})", supported_config.max_sample_rate());
-          rate = supported_config.max_sample_rate();
-        } else if get_sample_rate(sample_rate) < supported_config.min_sample_rate(){
-          println!("Requested Sample rate is lower than the minimum sample rate of the device ({})", supported_config.min_sample_rate());
-          rate = supported_config.min_sample_rate();
-        }
-
-        let config = StreamConfig { 
-          channels: 1, 
-          sample_rate: rate, 
-          buffer_size: cpal::BufferSize::Fixed(buffer_size),
-        };
 
         Self {
             name,
             status: DASPStatus::STARTING,
-            config,
+            jack: None,
             id,
             ch_type,
             level: 0,
             gain: 0,
             mute: true,
-            device,
-            buffer,
+            input: None,
             output: None,
-            processor: manager,
+            processor: Arc::new(std::sync::RwLock::new(manager)),
         }
     }
 
-    pub fn create_output(&mut self) -> Result<(), BuildStreamError> {
-        let buffer = self.output();
+    pub async fn run(&mut self) -> Result<(), BusError> {
+        let client_options = { ClientOptions::USE_EXACT_NAME };
+        let (jack, _status) = Client::new(&self.name, client_options).unwrap();
 
-        let output = self.device.build_output_stream(
-          &self.config, 
-          move | data: &mut [f32], _: &cpal::OutputCallbackInfo | {
-            let len = data.len().min(buffer.len());
-            data[..len].copy_from_slice(&buffer[..len]);
-            for sample in &mut data[len..] {
-                *sample = 0.0;
-            }
-          }, 
-          move |err| {
-            eprintln!("an error occurred on stream: {}", err);
-          }, 
-          Some(Duration::new(1, 0))
-        ).expect("Could not create output stream");
+        let input: Port<AudioIn> = jack.register_port("Input", AudioIn::default()).unwrap();
+        let mut output: Port<AudioOut> = jack.register_port("Output", AudioOut::default()).unwrap();
 
-        self.output = Some(Arc::new(output));
+        let processor_ptr = Arc::clone(&self.processor);
+
+        let closure: Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send> = 
+          Box::new( move |_client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
+                let mut processor = processor_ptr.write().unwrap();
+
+                // Safe read from input buffer
+                let data: Vec<f32> = unsafe {
+                    let ptr = input.buffer(ps.n_frames()) as *const f32;
+                    slice::from_raw_parts(ptr, ps.n_frames() as usize).to_vec()
+                };
+
+                let proc_out: Vec<f32> = processor.process_chain_buffer_mono(data);
+
+                // Guard against length mismatch
+                let out_slice = output.as_mut_slice(ps);
+                let n = out_slice.len().min(proc_out.len());
+                out_slice[..n].copy_from_slice(&proc_out[..n]);
+
+                jack::Control::Continue
+              });
+
+        let process = jack::contrib::ClosureProcessHandler::new(closure);
+
+        self.jack = Some(jack.activate_async((), process).unwrap());
+
         Ok(())
-    }
-
-    fn output(&mut self) -> Vec<f32> {
-        let mut output: Vec<f32> = Vec::new();
-
-        for id in self.buffer.keys() {
-            match self.buffer.get(id) {
-                Some(data) => {
-                    output = output.iter().zip(data.iter())
-                        .map(|(&o, &d)| (o + d).div(*id as f32))
-                        .collect();
-                },
-                None => {
-
-                }
-            }
-        }
-
-        output
-        
-    }
-
-
-    pub async fn run(&self) -> Result<(), BusError> {
-        if self.output.is_none() {
-            return Err(BusError::NoOutput)
-        }
-
-        let output = Arc::clone(&self.output.as_ref().unwrap());
-        output.play().unwrap();
-        return Ok(())
-    }
-
-    pub fn add_input(&mut self, id: usize, source: Vec<f32>) {
-        self.buffer.insert(id, source);
     }
 
     pub fn get_name(&mut self) -> String {

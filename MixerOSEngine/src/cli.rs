@@ -1,5 +1,6 @@
 use crate::system::state::EngineConfig;
-use neofetch::*;
+use hardware_query::{ HardwareInfo };
+use whoami::*;
 use yansi::Paint;
 
 pub struct Tui {
@@ -18,52 +19,40 @@ impl Tui {
     }
   }
 
-  pub async fn launch(&self) {
+  pub fn launch(&self) {
     println!("{} v{}", LOGO.rgb(140, 82, 255), VERSION);
     println!("{}", DIVIDER);
     println!(" ");
+
+    match HardwareInfo::query() {
+        Ok(info) => self.print_system_info(info),
+        Err(err) => println!("Could not get hardware info Error: {}", err),
+    }
     
-    self.print_system_info().await;
+    
   }
 
-  pub async fn print_system_info(&self) {
+  pub fn print_system_info(&self, hw_info: HardwareInfo) {
     println!("System Status");
     println!(" ");
 
-    let fetch = Neofetch::new().await;
 
-    if let Some((user, hname)) = fetch.user.ok().zip(fetch.hostname.ok()) {
-      println!("{}@{}", user.rgb(140, 82, 255), hname.rgb(140, 82, 255));
-    } 
+
+    println!("{}@{}", username().unwrap_or("Unknown".to_string()).rgb(140, 82, 255), hostname().unwrap_or("localhost".to_string()).rgb(140, 82, 255));
 
     println!(" ");
     println!( "-------------" );
     println!(" ");
 
-    if let Some(val) = fetch.cpu.ok() {
-      println!("CPU: {}", val.to_string());
-    } else {
-      println!("No CPU found").red();
-    }
+    println!("CPU: {} ({} Core) {}hz", hw_info.cpu().model_name, hw_info.cpu().physical_cores, hw_info.cpu().max_frequency);
+    println!("Memory: {} Gb", hw_info.memory().total_gb());
 
-    if let Some(val) = fetch.memory.ok() {
-      println!("Memory: {}", val.to_string());
-    } else {
-      println!("No memory found").red();
-    }
+    for (id, gpu) in hw_info.gpus().iter().enumerate() {
+      println!("GPU{}: {} {} {} Gb {:?}", id, gpu.vendor(), gpu.model_name(), gpu.memory_gb(), gpu.compute_capabilities);
+    } 
 
-    if let Some(val) = fetch.gpu {
-      for (id, gpu) in val.iter().enumerate() {
-        println!("GPU{}: {}", id, gpu);
-      } 
-    } else {
-      println!("No GPU found").red();
-    }
-
-    if let Some(val) = fetch.network.ok() {
-      for net in val.iter() {
-        println!("Network: {}", net)
-      }
+    for net in hw_info.network_interfaces.iter() {
+      println!("Network: {:?}", net)
     }
     
     println!(" ");

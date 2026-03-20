@@ -7,7 +7,7 @@ pub enum ChannelStripError {
   InvalidOutput,
   NoInput,
   InputError,
-  StreamError,
+  NotInitilized,
   SystemChannel
 }
 
@@ -18,5 +18,7 @@ pub enum BusError {
   InvalidGain,
   InvalidInput,
   InvalidOutput,
+  NotInitilized,
   NoOutput,
+  SystemChannel
 }

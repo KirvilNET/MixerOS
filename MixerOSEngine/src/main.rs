@@ -27,11 +27,9 @@ async fn main() {
   }
 
   let tui = Tui::new(config.clone());
-
-  tui.launch().await;
-
-  let host = cpal::host_from_id(cpal::HostId::Jack).unwrap();
-  let mut proc = Engine::new(host, config.channels, config.bus, config.bit_depth, config.sample_rate, config.buffer_size);
+  tui.launch();
+  
+  let mut proc = Engine::new(config.name, config.channels, config.bus, config.sample_rate, config.buffer_size);
   
   proc.start().unwrap();
   proc.run().await;

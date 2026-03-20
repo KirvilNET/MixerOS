@@ -25,8 +25,11 @@ pub struct GPU {
 }
 
 impl GPU {
-  pub fn new(channels: u32, buffer_size: u32) -> Self {
-    let base = VKbase::new();
+  pub fn new(channels: u32, buffer_size: u32) -> std::result::Result<Self, GPUError> {
+    let base = match VKbase::new() {
+        Ok(base) => base,
+        Err(err) => return Err(err),
+    };
     let device = base.device.clone();
     let device_properties = unsafe { base.instance.get_physical_device_properties(base.physical_device) };
 
@@ -48,7 +51,7 @@ impl GPU {
     let bus_output_buff = create_buffer(&device, &mut allocator, total_bytes,
     BufferUsageFlags::STORAGE_BUFFER, MemoryLocation::GpuToCpu, "bus_output");
 
-    Self {
+    return Ok(Self {
       base,
       device,
       device_properties,
@@ -58,7 +61,7 @@ impl GPU {
       total_bytes,
       allocator,
       buffers: GPUbuffers { channel_input_buff, channel_output_buff, bus_input_buff, bus_output_buff }
-    }
+    })
   }
 
 }

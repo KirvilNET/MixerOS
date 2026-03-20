@@ -24,16 +24,20 @@ pub struct ModuleManager {
 		modules: HashMap<String, Arc<RwLock<BoxedProcessor>>>,
 		/// Processing order
 		chain: Vec<String>,
-		processor: Arc<Processor>
+		processor: Arc<Processor>,
 }
+
+unsafe impl Send for ModuleManager {}
+unsafe impl Sync for ModuleManager {}
 
 impl ModuleManager {
 		pub fn new(processor: Processor) -> Self {
-				Self {
-					modules: HashMap::new(),
-					chain: Vec::new(),
-					processor: Arc::new(processor)
-				}
+
+			Self {
+				modules: HashMap::new(),
+				chain: Vec::new(),
+				processor: Arc::new(processor),
+			}
 		}
 
 		/// Add a processor to the manager
@@ -41,6 +45,7 @@ impl ModuleManager {
 			if self.modules.contains_key(id) {
 				return Err(ModuleManagerError::ModuleAlreadyExist)
 			}
+			
 			self.modules.insert(id.to_string(), Arc::new(RwLock::new(processor)));
 			Ok(())
 		}
@@ -73,34 +78,35 @@ impl ModuleManager {
 
 		/// Process stereo buffers through the entire chain
 		pub fn process_chain_buffer_mono(&mut self, samples: Vec<f32>) -> Vec<f32> {
+			let mut output: Vec<f32> = Vec::new();
+
 			match &self.processor.processor {
 					ProcessorUnit::GPU(gpu) => {
 						let gpu_ptr: std::sync::Arc<gpu::GPU> = Arc::clone(gpu);
-						let mut output: Vec<f32> = Vec::new();
+						
 
 						for id in &self.chain {
 							if let Some(processor) = self.modules.get_mut(id) {
-								let out = processor.write().process_gpu(samples.clone(), gpu_ptr.clone());
-								output.iter_mut().enumerate().map(|(index, i)| *i + out[index]);
+								let out = processor.write().process_gpu(samples.to_vec(), gpu_ptr.clone());
+								let _ = &output.iter_mut().enumerate().map(|(index, i)| *i + out[index]);
 							}
 						}
-
-						return output
+						
 					},
 					ProcessorUnit::CPU(cpu) => {
 						let cpu_ptr: std::sync::Arc<cpu::CPU> = Arc::clone(cpu);
-						let mut output: Vec<f32> = Vec::new();
 
 						for id in &self.chain {
 							if let Some(processor) = self.modules.get_mut(id) {
-								let out: Vec<f32> = processor.write().process_cpu(samples.clone(), cpu_ptr.clone());
-								output.iter_mut().enumerate().map(|(index, i)| *i + out[index]);
+								let out: Vec<f32> = processor.write().process_cpu(samples.to_vec(), cpu_ptr.clone());
+								let _ = output.iter_mut().enumerate().map(|(index, i)| *i + out[index]);
 							}
 						}
 
-						return output
 					},
 			}
+			
+			return output.iter().map(|smpl| smpl / self.chain.len() as f32).collect::<Vec<f32>>()
 		}
 
 		/// Reorder the processing chain

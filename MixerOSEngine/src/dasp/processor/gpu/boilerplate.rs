@@ -1,8 +1,11 @@
+use std::path::Path;
+
 use ash::{ Device, Entry, vk };
 
+#[derive(Debug)]
 pub enum GPUError {
     NoGPU,
-
+    NoVulkanSDK
 }
 
 #[derive(Clone)]
@@ -16,8 +19,24 @@ pub struct VKbase {
 }
 
 impl VKbase {
-    pub fn new() -> Self {
-        let entry = Entry::linked();
+    pub fn new() -> Result<Self, GPUError> {
+        
+
+        #[cfg(not(target_os = "macos"))]
+        let entry = unsafe { Entry::load().expect("Could not locate a Vulkan SDK") };
+
+        #[cfg(target_os = "macos")]
+        let entry: Entry;
+        if let Some(vulkan_sdk) = std::option_env!("VULKAN_SDK") {
+            let path_str = format!("{}/lib/libvulkan.dylib", vulkan_sdk);
+            let path = Path::new(&path_str);
+            entry = unsafe { Entry::load_from(path).expect("Could not locate a Vulkan SDK") };
+        } else {
+            return Err(GPUError::NoVulkanSDK)
+        }
+
+        
+
 
         let app_info = vk::ApplicationInfo {
             api_version: vk::make_api_version(0, 1, 0, 0),
@@ -85,18 +104,23 @@ impl VKbase {
 
         let compute_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
 
-        Self {
+        return Ok(Self {
             entry,
             instance,
             physical_device,
             device,
             compute_queue,
             queue_family_index,
-        }
+        })
     }
 
     pub fn check() -> Result<(), GPUError> {
-        let entry = Entry::linked();
+        let entry = unsafe { 
+            match Entry::load() {
+                Ok(entry) => entry,
+                Err(_) => return Err(GPUError::NoGPU),
+            } 
+        };
 
         let app_info = vk::ApplicationInfo {
             api_version: vk::make_api_version(0, 1, 0, 0),

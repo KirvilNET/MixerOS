@@ -20,9 +20,13 @@ pub struct Processor {
 }
 
 impl Processor {
-  pub fn create_gpu_processor(channels: u32, buffer_size: u32) -> Arc<gpu::GPU> {
-    let gpu = gpu::GPU::new(channels, buffer_size);
-    return Arc::new(gpu)
+  pub fn create_gpu_processor(channels: u32, buffer_size: u32) -> Result<Arc<gpu::GPU>, gpu::GPUError> {
+    let gpu = match gpu::GPU::new(channels, buffer_size) {
+        Ok(gpu) => gpu,
+        Err(err) => return Err(err),
+    };
+
+    return Ok(Arc::new(gpu))
   }
 
   pub fn create_cpu_processor(channels: u32, buffer_size: u32) -> Arc<cpu::CPU> {

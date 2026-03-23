@@ -6,25 +6,23 @@
 		},
 		{
 			"name": "MixerOS Engine",
-			"path": "MixerOSEngine"
+			"path": "mixeros_engine"
 		},
 		{
 			"name": "MixerOS UI",
-			"path": "MixerOS"
+			"path": "mixeros"
 		},
 		{
 			"name": "Linux",
-			"path": "Linux"
+			"path": "linux"
 		}
 	],
 	"settings": {
 		"rust-analyzer.linkedProjects": [
-			"./MixerOSEngine/Cargo.toml",
-			"./MixerOS/src-tauri/Cargo.toml"
+			"./mixeros_engine/Cargo.toml",
+			"./mixeros/src-tauri/Cargo.toml",
+			"./mixeros_tools/Cargo.toml"
 		],
-		"glsllint.glslangValidatorArgs": [
-			"-V"
-		]
 
 	},
 	"extensions": {

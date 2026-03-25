@@ -1,4 +1,5 @@
-# TODO List 
+# TODO List
+
 (for when the ADHD kicks in)
 
 ---
@@ -12,7 +13,7 @@
 - [ ] Finish Control Protocol.
 - [ ] Finish implementing control into engine.
 - [ ] Create the rest of the processing modules.
-- [ ] Implement VST3 functions. 
+- [ ] Implement VST3 functions.
   - [ ] Replacing Built-in modules with VST3
   - [ ] SuperRack like FX management.
 - [ ] Parameters

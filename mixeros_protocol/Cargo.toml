@@ -1,11 +1,13 @@
 [package]
 name = "mixeros_protocol"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+
 mdns-sd = "0.18.2"
-bytes = "1"
-bincode = "2.0.1"
-serde = { version = "1", features = ["derive"] }
+
+capnp = "0.25.2"
+capnpc = "0.25.0"
+capnp-futures = "0.25.2"

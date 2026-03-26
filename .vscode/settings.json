@@ -1,7 +1,3 @@
 {
-    "rust-analyzer.linkedProjects": [
-        "./MixerOS/src-tauri/Cargo.toml",
-        "./mixeros_protocol/Cargo.toml"
-
-    ]
+  //"rust-analyzer.linkedProjects": ["/Cargo.toml"]
 }

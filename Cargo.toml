@@ -1,0 +1,7 @@
+[workspace]
+resolver = "3"
+members = [
+    "mixeros_engine",
+    "mixeros_protocol",
+]
+

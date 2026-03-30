@@ -77,7 +77,7 @@ impl ChannelStrip {
       client_options.insert(ClientOptions::NO_START_SERVER);
 
       let (jack, _status) = Client::new(&self.name, client_options).unwrap();
-
+      
       let mut output: Port<AudioOut> = jack.register_port("Output", AudioOut::default()).unwrap();
 
       let processor_ptr = Arc::clone(&self.processor);

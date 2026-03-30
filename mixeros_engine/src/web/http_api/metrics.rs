@@ -1,11 +1,11 @@
 use std::time;
 
-use axum::{ Router, http::Response, response::{Json}, routing::{get, post} };
+use axum::{ Router, http::Response, routing::{get} };
 
 use serde_json;
 use serde::{ Deserialize, Serialize };
 
-use sysinfo::{ Components, Disks, Networks, System };
+use sysinfo::{ Networks, System };
 
 #[derive(Serialize, Deserialize)]
 struct CPUData {

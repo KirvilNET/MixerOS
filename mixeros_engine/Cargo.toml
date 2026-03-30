@@ -2,6 +2,7 @@
 name = "mixeros_engine"
 version = "0.1.0"
 edition = "2024"
+licence = "GPL-3.0-or-later"
 
 [dependencies]
 jack = {version = "0.13.5", features = ["dynamic_loading"]}
@@ -26,6 +27,8 @@ serde = { version = "1.0", features = ["derive"] }
 yaml_serde = "0.10.4"
 serde_json = "1"
 tokio = { version = "1.50.0", features = ["full"] }
+capnp-rpc = "0.25.0"
+capnp = "0.25.2"
 
 # compute
 gpu-allocator = "0.28.0"
@@ -34,4 +37,5 @@ bytemuck = { version = "1", features = ["derive"] }
 version = "0.12"
 features = ["CL_VERSION_2_1", "CL_VERSION_2_2", "CL_VERSION_3_0", "serde"]
 
-
+# mixeros libs
+mixeros_protocol = { path = "../mixeros_protocol" }

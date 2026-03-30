@@ -1,16 +1,14 @@
-use tokio::net::*;
 use axum::{
-    routing::{ get, post },
-    http::StatusCode,
-    Json, Router,
+    routing::{ get },
+    Router,
 };
 
-use crate::system::state::EngineConfig;
+//use crate::system::state::EngineConfig;
 use super::http_api::{ metrics };
 
 
 pub struct WebServer {
-    port: usize,
+    port: usize
 }
 
 impl WebServer {
@@ -18,6 +16,10 @@ impl WebServer {
         Self {
             port
         }
+    }
+
+    pub async fn start_rpc(&mut self) {
+
     }
 
     pub async fn start_web(&mut self) {

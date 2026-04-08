@@ -33,7 +33,7 @@ pub fn get_sample_rate(rate: SampleRate) -> u32 {
   }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DASPStatus {
   STARTING,
   ONLINE,
@@ -55,23 +55,35 @@ impl Debug for DASPStatus {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub enum ChannelType {
+pub enum ChannelPermissions {
   USER,
   SYSTEM,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Deserialize)]
 pub enum BusType {
   MAINS,
   MONITOR,
   GROUP,
   AUX,
-  SUM
+  MATRIX
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DASPProcessorType {
   CPU,
   GPU,
+  NPU,
+  DSP,
+  FPGA,
+  TPU,
   NONE
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum EngineRole {
+  Controller,
+  Node,
+  RedundancyController,
+  RedundancyNode,
 }

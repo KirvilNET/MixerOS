@@ -1,13 +1,13 @@
-use jack::contrib::ClosureProcessHandler;
+use mixeros_jack::contrib::ClosureProcessHandler;
 use tokio::sync::{ RwLock };
 
 use core::slice;
 use std::sync::Arc;
 
-use jack::{ AudioIn, AudioOut, Unowned, Client, ClientOptions, AsyncClient, ProcessScope, Control };
-use jack::Port;
+use mixeros_jack::{ AudioIn, AudioOut, Unowned, Client, ClientOptions, AsyncClient, ProcessScope, Control };
+use mixeros_jack::Port;
 
-use crate::system::util::{ ChannelType, SampleRate };
+use crate::system::util::{ ChannelPermissions, SampleRate };
 use crate::dasp::module_manager::ModuleManager;
 use crate::router::error::ChannelStripError;
 use crate::system::util::*;
@@ -22,14 +22,13 @@ pub enum InputSel {
 
 pub struct ChannelStrip {
   name: String,
-  jack: Option<AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send>>>>,
+  mixeros_jack: Option<AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send>>>>,
   status: DASPStatus,
-  id: usize,
-  ch_type: ChannelType,
+  id: u32,
+  ch_type: ChannelPermissions,
   is_redundant: bool,
   input_sel: InputSel,
   level: i8,
-  gain: i8,
   mute: bool,
   inputs: Option<Vec<Arc<Port<Unowned>>>>,
   output: Option<Arc<Port<Unowned>>>,
@@ -38,19 +37,18 @@ pub struct ChannelStrip {
 }
 
 impl ChannelStrip {
-  pub fn new(name: String, id: usize, ch_type: ChannelType, is_redundant: bool, sample_rate: SampleRate, buffer_size: usize, kernel_manager: Arc<KernelManager>) -> Self {
+  pub fn new(name: String, id: u32, ch_type: ChannelPermissions, is_redundant: bool, sample_rate: SampleRate, buffer_size: usize, kernel_manager: Arc<KernelManager>) -> Self {
     let manager = ModuleManager::new(buffer_size);
 
     Self {
       name,
-      jack: None,
+      mixeros_jack: None,
       status: DASPStatus::STARTING,
       id,
       ch_type,
       is_redundant,
       input_sel: InputSel::A,
       level: 0,
-      gain: 0,
       mute: true,
       inputs: None,
       output: None,
@@ -76,9 +74,9 @@ impl ChannelStrip {
 
       client_options.insert(ClientOptions::NO_START_SERVER);
 
-      let (jack, _status) = Client::new(&self.name, client_options).unwrap();
+      let (mixeros_jack, _status) = Client::new(&self.name, client_options).unwrap();
       
-      let mut output: Port<AudioOut> = jack.register_port("Output", AudioOut::default()).unwrap();
+      let mut output: Port<AudioOut> = mixeros_jack.register_port("Output", AudioOut::default()).unwrap();
 
       let processor_ptr = Arc::clone(&self.processor);
 
@@ -91,8 +89,8 @@ impl ChannelStrip {
       self.output = Some(Arc::new(output.clone_unowned()));
 
       if is_redundant == true {
-        let input_a: Port<AudioIn> = jack.register_port("Input_A", AudioIn::default()).unwrap();
-        let input_b: Port<AudioIn> = jack.register_port("Input_B", AudioIn::default()).unwrap();
+        let input_a: Port<AudioIn> = mixeros_jack.register_port("Input_A", AudioIn::default()).unwrap();
+        let input_b: Port<AudioIn> = mixeros_jack.register_port("Input_B", AudioIn::default()).unwrap();
 
         inputs.push(Arc::new(input_a.clone_unowned()));
         inputs.push(Arc::new(input_b.clone_unowned()));
@@ -100,7 +98,7 @@ impl ChannelStrip {
         self.inputs = Some(inputs);
 
         closure = 
-          Box::new( move |_client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
+          Box::new( move |_client: &mixeros_jack::Client, ps: &mixeros_jack::ProcessScope| -> mixeros_jack::Control {
                 let mut processor = processor_ptr.write().unwrap();
 
                 if input_sel == InputSel::A {
@@ -132,16 +130,16 @@ impl ChannelStrip {
                 }
 
 
-                jack::Control::Continue
+                mixeros_jack::Control::Continue
               });
       } else {
-        let input_a: Port<AudioIn> = jack.register_port("Input_A", AudioIn::default()).unwrap();
+        let input_a: Port<AudioIn> = mixeros_jack.register_port("Input_A", AudioIn::default()).unwrap();
 
         inputs.push(Arc::new(input_a.clone_unowned()));
         self.inputs = Some(inputs);
 
         closure = 
-          Box::new( move |_client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
+          Box::new( move |_client: &mixeros_jack::Client, ps: &mixeros_jack::ProcessScope| -> mixeros_jack::Control {
             let mut processor = processor_ptr.write().unwrap();
 
             // Safe read from input buffer
@@ -156,23 +154,22 @@ impl ChannelStrip {
             let n = out_slice.len().min(proc_out.len());
             out_slice[..n].copy_from_slice(&proc_out[..n]);
 
-            jack::Control::Continue
+            mixeros_jack::Control::Continue
           });
       }
 
-      let process = jack::contrib::ClosureProcessHandler::new(closure);
+      let process = mixeros_jack::contrib::ClosureProcessHandler::new(closure);
 
-      self.jack = Some(jack.activate_async((), process).expect("Jack activate_async Failed"));
+      self.mixeros_jack = Some(mixeros_jack.activate_async((), process).expect("mixeros_jack activate_async Failed"));
 
       Ok(())
   }
 
   pub fn get_name(&mut self) -> String { return self.name.clone(); }
   pub fn get_level(&mut self) -> i8 { return self.level; }
-  pub fn get_gain(&mut self) -> i8 { return self.gain; }
   pub fn get_mute(&mut self) -> bool { return self.mute; }
-  pub fn get_type(&mut self) -> ChannelType { return self.ch_type }
-  pub fn get_id(&mut self) -> usize { return self.id }
+  pub fn get_type(&mut self) -> ChannelPermissions { return self.ch_type }
+  pub fn get_id(&mut self) -> u32 { return self.id }
 
   pub fn set_name(&mut self, name: String) -> Result<(), ChannelStripError> { 
     if name.len() == 0 || name.len() > 30 {
@@ -190,13 +187,6 @@ impl ChannelStrip {
     Ok(())
   }
 
-  pub fn set_gain(&mut self, gain: i8) -> Result<(), ChannelStripError> { 
-    if gain < 60 || gain > -20 {
-      return Err(ChannelStripError::InvalidGain)
-    }
-    self.gain = gain;
-    Ok(())
-  }
 
   pub fn set_mute(&mut self, mute: bool) { 
     if self.mute != mute {
@@ -208,8 +198,8 @@ impl ChannelStrip {
     self.status = status;
   }
 
-  pub fn set_id(&mut self, id: usize) -> Result<(), ChannelStripError> {
-    if self.ch_type == ChannelType::USER {
+  pub fn set_id(&mut self, id: u32) -> Result<(), ChannelStripError> {
+    if self.ch_type == ChannelPermissions::USER {
       self.id = id;
       return Ok(())
     } else {

@@ -1,3 +1,7 @@
 {
-  "rust-analyzer.linkedProjects": ["Cargo.toml"]
+  "rust-analyzer.linkedProjects": [
+    "Cargo.toml"
+  ],
+  "OpenCL.explorer.localizedProperties": false,
+  "OpenCL.server.deviceID": 177655671
 }

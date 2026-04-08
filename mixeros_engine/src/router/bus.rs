@@ -1,6 +1,6 @@
-use jack::{ AudioIn, AudioOut, Unowned, Client, ClientOptions, AsyncClient, ProcessScope, Control };
-use jack::Port;
-use jack::contrib::ClosureProcessHandler;
+use mixeros_jack::{ AudioIn, AudioOut, Unowned, Client, ClientOptions, AsyncClient, ProcessScope, Control };
+use mixeros_jack::Port;
+use mixeros_jack::contrib::ClosureProcessHandler;
 
 use core::slice;
 use std::sync::{ Arc, Mutex };
@@ -9,7 +9,7 @@ use std::sync::{ Arc, Mutex };
 use crate::dasp::module_manager::ModuleManager;
 use crate::router::error::BusError;
 use crate::system::util::*;
-use crate::system::util::{ChannelType, SampleRate};
+use crate::system::util::{ChannelPermissions, SampleRate};
 use crate::dasp::processor::*;
 use crate::dasp::dasp_modules::modules::*;
 use crate::cli::table::LiveTable;
@@ -17,8 +17,8 @@ use crate::cli::table::LiveTable;
 pub struct Bus {
     name: String,
     status: DASPStatus,
-    jack: Option<AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send>>>>,
-    id: usize,
+    mixeros_jack: Option<AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send>>>>,
+    id: u32,
     bus_type: BusType,
     channels: usize,
     level: i8,
@@ -31,15 +31,13 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(name: String, id: usize, bus_type: BusType, channels: usize, sample_rate: SampleRate, buffer_size: usize, kernel_manager: Arc<KernelManager>) -> Self {
+    pub fn new(name: String, id: u32, bus_type: BusType, channels: usize, sample_rate: SampleRate, buffer_size: usize, kernel_manager: Arc<KernelManager>) -> Self {
         let manager = ModuleManager::new(buffer_size);
-
-        
 
         Self {
             name,
             status: DASPStatus::STARTING,
-            jack: None,
+            mixeros_jack: None,
             id,
             bus_type,
             channels,
@@ -71,7 +69,7 @@ impl Bus {
         client_options.insert(ClientOptions::USE_EXACT_NAME);
         client_options.insert(ClientOptions::NO_START_SERVER);
         
-        let (jack, _status) = Client::new(&self.name.as_str(), client_options).unwrap();
+        let (mixeros_jack, _status) = Client::new(&self.name.as_str(), client_options).unwrap();
 
         let mut input: Vec<Arc<Port<AudioIn>>> = Vec::new();
         let mut output: Vec<Arc<Mutex<Port<AudioOut>>>> = Vec::new();
@@ -80,8 +78,8 @@ impl Bus {
         let mut outputs_unowned: Vec<Arc<Port<Unowned>>> = Vec::new();
 
         for channel in 0..self.channels {
-            let inp: Port<AudioIn> = jack.register_port(format!("Input {}", channel).as_str(), AudioIn::default()).unwrap();
-            let out: Port<AudioOut> = jack.register_port(format!("Output {}", channel).as_str(), AudioOut::default()).unwrap();
+            let inp: Port<AudioIn> = mixeros_jack.register_port(format!("Input {}", channel).as_str(), AudioIn::default()).unwrap();
+            let out: Port<AudioOut> = mixeros_jack.register_port(format!("Output {}", channel).as_str(), AudioOut::default()).unwrap();
 
             inputs_unowned.push(Arc::new(inp.clone_unowned()));
             outputs_unowned.push(Arc::new(out.clone_unowned()));
@@ -95,7 +93,7 @@ impl Bus {
         let channels: usize = self.channels.clone();
 
         let closure: Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send> = 
-          Box::new( move |_client: &jack::Client, ps: &jack::ProcessScope| -> jack::Control {
+          Box::new( move |_client: &mixeros_jack::Client, ps: &mixeros_jack::ProcessScope| -> mixeros_jack::Control {
                 let mut processor = processor_ptr.write().unwrap();
 
                 for channel in 0..channels {
@@ -115,26 +113,30 @@ impl Bus {
                     out_slice[..n].copy_from_slice(&proc_out[..n]);
                 }
 
-                jack::Control::Continue
+                mixeros_jack::Control::Continue
               });
 
-        let process = jack::contrib::ClosureProcessHandler::new(closure);
-        self.jack = Some(jack.activate_async((), process).expect("Jack activate_async Failed"));
+        let process = mixeros_jack::contrib::ClosureProcessHandler::new(closure);
+        self.mixeros_jack = Some(mixeros_jack.activate_async((), process).expect("mixeros_jack activate_async Failed"));
 
         Ok(())
     }
 
-    pub fn get_name(&mut self) -> String {
+    pub fn get_name(&self) -> String {
         return self.name.clone();
     }
-    pub fn get_level(&mut self) -> i8 {
+    pub fn get_level(&self) -> i8 {
         return self.level;
     }
-    pub fn get_gain(&mut self) -> i8 {
+    pub fn get_gain(&self) -> i8 {
         return self.gain;
     }
-    pub fn get_mute(&mut self) -> bool {
+    pub fn get_mute(&self) -> bool {
         return self.mute;
+    }
+
+    pub fn get_type(&self) -> BusType {
+        return self.bus_type;
     }
 
     pub fn set_name(&mut self, name: String) -> Result<(), BusError> {

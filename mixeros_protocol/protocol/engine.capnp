@@ -8,22 +8,15 @@ using Net = import "include/system/network.capnp";
 using System = import "include/system/system.capnp";
 using Device = import "include/device.capnp";
 
-enum EngineRole {
-
-  # Defines the engine as a cluster controller.
-  controller @0;
-
-  # Defines the engine as a node in a cluster.
-  node @1;
-
-  # Defines the engine as a redundancy node.
-  # Can either be a Redundant Controller or Node.
-  redundancyNode @2;
+struct NumBuses {
+  auxes @0 :UInt32;
+  groups @1 :UInt32;
+  matrices @2 :UInt32;
 }
 
 interface Engine {
-  getRole @0 () -> (role :EngineRole);
-  
+  getRole @0 () -> (role :Util.EngineRole);
+  setRole @1 (role :Util.EngineRole);
 }
 
 interface DASPInfo extends(Engine) {
@@ -33,42 +26,39 @@ interface DASPInfo extends(Engine) {
   # Get the number of channels
   getNumChannels @0 () -> (channels :UInt32);
 
-  # Get the number of aux buses
-  getNumAuxes @1 () -> (auxes :UInt32);
-
-  # Get the number of matrix buses
-  getNumMatrices @2 () -> (matrices :UInt32);
+  # Get the number of buses 
+  getNumBuses @1 () -> (buses :NumBuses);
 
   # Get the number of groups
-  getNumGroups @3 () -> (groups :UInt32);
+  getNumGroups @2 () -> (groups :UInt32);
 
   #? Audio Controls
 
   # Get the number of DCAs 
-  getNumDca @4 () -> (dca :UInt32);
+  getNumDca @3 () -> (dca :UInt32);
 
   # Get the number of Mute Groups
-  getNumMuteGroups @5 () -> (mutegroups :UInt32);
+  getNumMuteGroups @4 () -> (mutegroups :UInt32);
 
   #? System Status
 
   # Get cpu data
-  getCPU @6 () -> (cpu :System.CPU);
+  getCPU @5 () -> (cpu :System.CPU);
 
   # Get cpu data
-  getMemory @7 () -> (memory :System.Memory);
+  getMemory @6 () -> (memory :System.Memory);
 
   # Get cpu data
-  getProcessor @8 () -> (processor :System.CPU);
+  getProcessor @7 () -> (processor :System.CPU);
 
   # Get cpu data
-  getUptime @9 () -> (uptime :UInt64);
+  getUptime @8 () -> (uptime :UInt64);
 
   # Get cpu data
-  getClockData @10 () -> (clockSource :System.ClockSource, isLocked :Bool);
+  getClockData @9 () -> (clockSource :System.ClockSource, isLocked :Bool);
 
   # Get network data
-  getNetwork @11 () -> (interfaces :List(Net.Interface));
+  getNetwork @10 () -> (interfaces :List(Net.Interface));
 
 }
 

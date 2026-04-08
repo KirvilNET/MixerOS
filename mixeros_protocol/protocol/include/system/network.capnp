@@ -27,13 +27,6 @@ struct IPv6 {
     group7 @7 :UInt16;
 }
 
-struct SubnetMask {
-    group0 @0 :UInt8; 
-    group1 @1 :UInt8;
-    group2 @2 :UInt8;
-    group3 @3 :UInt8;
-}
-
 struct Interface {
     # Name of the interface
     name @0 :Text;
@@ -49,10 +42,5 @@ struct Interface {
 
     # IPv6 addresses of the interface
     ipv6 @4 :List(IPv6);
-
-    # Scope of the interface
-    scope @5 :Text;
-
-    # SubnetMask
-    subnetMask @6 :SubnetMask;
+    
 }

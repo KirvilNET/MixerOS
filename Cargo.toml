@@ -3,5 +3,10 @@ resolver = "3"
 members = [
     "mixeros_engine",
     "mixeros_protocol",
+    "mixeros_jack",
+    "mixeros_tools"
 ]
 
+[workspace.dependencies]
+mixeros_protocol = { path="./mixeros_protocol", version = "1.0.0"}
+mixeros_jack ={ path="./mixeros_jack", version = "1.0.0", features = ["dynamic_loading", "controller"]}

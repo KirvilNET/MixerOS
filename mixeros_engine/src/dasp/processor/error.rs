@@ -7,6 +7,7 @@ pub enum ClError {
     KernelNotFound(String),
     BuildFailed(String),
     OpenClError(String),
+    InternalError(opencl3::error_codes::ClError),
 }
 
 impl fmt::Display for ClError {
@@ -17,6 +18,7 @@ impl fmt::Display for ClError {
             ClError::KernelNotFound(name) => write!(f, "Kernel '{}' not found", name),
             ClError::BuildFailed(log) => write!(f, "Build failed:\n{}", log),
             ClError::OpenClError(msg) => write!(f, "OpenCL error: {}", msg),
+            ClError::InternalError(err) => write!(f, "Internal Error: {}", err)
         }
     }
 }

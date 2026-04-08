@@ -1,8 +1,8 @@
 use crate::system::state::EngineConfig;
 use whoami::*;
 use yansi::Paint;
-use std::io::{stdout, Write};
-use crossterm::{ cursor, terminal::{self, ClearType}, ExecutableCommand };
+use std::io::{ stdout };
+use crossterm::{ cursor, ExecutableCommand };
 
 use crate::cli::table::LiveTable;
 

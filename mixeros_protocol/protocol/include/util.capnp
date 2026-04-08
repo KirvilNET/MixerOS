@@ -2,7 +2,7 @@
 
 # Vector 1 Data
 struct Vec1(DataType) {
-
+  x @0 :DataType;
 }
 
 # Vector 2 Data
@@ -16,6 +16,18 @@ struct Vec3(DataType) {
     x @0 :DataType;
     y @1 :DataType;
     z @2 :DataType;
+}
+
+enum EngineRole {
+  # Defines the engine as a cluster controller.
+  controller @0;
+
+  # Defines the engine as a node in a cluster.
+  node @1;
+
+  # Defines the engine as a redundancy node.
+  redundancyController @2;
+  redundancyNode @3;
 }
 
 enum KneeType {

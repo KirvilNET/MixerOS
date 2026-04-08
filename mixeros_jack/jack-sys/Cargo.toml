@@ -1,0 +1,23 @@
+[package]
+authors = ["Patrick Reisert"]
+description = "Low-level binding to the JACK audio API."
+edition = "2024"
+license = "MIT OR Apache-2.0"
+links = "mixeros-jack"
+name = "jack-sys"
+repository = "https://github.com/RustAudio/rust-jack/tree/main/jack-sys"
+version = "0.5.1"
+
+[dependencies]
+lazy_static = "1.4"
+libc = "0.2"
+libloading = "0.9"
+log = "0.4"
+
+[build-dependencies]
+bitflags = "2"
+pkg-config = "0.3.32"
+
+[features]
+default_features = ["dynamic_loading"]
+dynamic_loading = []

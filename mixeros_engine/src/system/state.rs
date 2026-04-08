@@ -1,27 +1,58 @@
-use serde::{Deserialize, Serialize};
+use mixeros_jack::Unowned;
+use mixeros_protocol::mixeros_protocol_sys::proto::include::util_capnp::Permissions;
+use serde::{ Deserialize, Serialize };
 use tokio::{ fs };
 
-use std::{path::{Path, PathBuf}, sync::*};
+use std::{ path::{Path, PathBuf}, sync::* };
+use anyhow::{ anyhow };
 
 use super::util::*;
 
+#[derive(Debug)]
 pub struct StateManager {
   dasp_state: Arc<Mutex<DASPState>>,
   config: Arc<Mutex<EngineConfig>>
 }
 
+#[derive(Debug)]
+pub enum StateManagerError {
+  FsReadError,
+  FsWriteError,
+  MutexLockError,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct ChannelConfig {
+  pub id: u32,
+  pub name: String,
+  pub permission: ChannelPermissions,
+  pub is_redundant: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct BusConfig {
+  pub id: u32,
+  pub name: String,
+  pub permission: ChannelPermissions,
+  pub is_redundant: bool,
+  pub bus_type: BusType,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct EngineConfig {
   pub name: String,
-  pub channels: usize,
-  pub bus: usize,
+  pub channels: Vec<ChannelConfig>,
+  pub role: EngineRole,
+  pub buses: Vec<BusConfig>,
   pub bit_depth: BitDepth,
   pub sample_rate: SampleRate,
   pub buffer_size: usize,
-  pub ws_port: usize,
-  config_path: String
+  pub rpc_port: usize,
+  pub webserver_port: usize,
+  pub config_path: String
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct DASPState {
   dasp_status: DASPStatus,
   dasp_proc_type: DASPProcessorType,
@@ -29,30 +60,55 @@ pub struct DASPState {
 
 impl Default for EngineConfig {
   fn default() -> Self {
+    let ch_vec = vec![
+      ChannelConfig { id: 3, name: "Channel 3".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 4, name: "Channel 4".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 5, name: "Channel 5".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 6, name: "Channel 6".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 7, name: "Channel 7".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 8, name: "Channel 8".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 9, name: "Channel 9".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 10, name: "Channel 10".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 11, name: "Channel 11".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 12, name: "Channel 12".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 13, name: "Channel 13".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 14, name: "Channel 14".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 15, name: "Channel 15".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+      ChannelConfig { id: 16, name: "Channel 16".to_string(), permission: ChannelPermissions::USER, is_redundant: true },
+    
+    ];
+    let buses_vec = vec![
+      BusConfig { id: 3, name: "Aux 1".to_string(), permission: ChannelPermissions::USER, is_redundant: false, bus_type: BusType::AUX }
+    ];
+
     Self {
       name: "MixerOS-Engine".to_string(),
-      channels: 8,
-      bus: 2,
+      channels: ch_vec,
+      role: EngineRole::Controller,
+      buses: buses_vec,
       bit_depth: BitDepth::BIT32,
-      sample_rate: SampleRate::Hz48000,
-      buffer_size: 1024,
-      ws_port: 3000,
+      sample_rate: SampleRate::Hz44100,
+      buffer_size: 512,
+      rpc_port: 3000,
+      webserver_port: 3000,
       config_path: " ".to_string()
     }
   }
 }
 
 impl EngineConfig {
-  fn new(name: String, channels: usize, bus: usize, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize, port: usize) -> Self {
+  fn new(name: String, channels: Vec<ChannelConfig>, buses: Vec<BusConfig>, bit_depth: BitDepth, sample_rate: SampleRate, buffer_size: usize, port: usize, web_port: usize, role: EngineRole) -> Self {
 
     Self {
       name,
       channels,
-      bus,
+      role,
+      buses,
       bit_depth,
       sample_rate,
       buffer_size,
-      ws_port: port,
+      rpc_port: port,
+      webserver_port: web_port,
       config_path: " ".to_string()
     }
   }
@@ -69,11 +125,6 @@ impl Default for DASPState {
       dasp_proc_type: DASPProcessorType::NONE
     }
   }
-}
-
-pub enum StateManagerError {
-  FsReadError,
-  FsWriteError,
 }
 
 async fn find_file(dir: &Path, target: &str) -> Option<PathBuf> {
@@ -101,6 +152,20 @@ impl StateManager {
     Self {
       dasp_state: Arc::new(Mutex::new(DASPState::default())),
       config: Arc::new(Mutex::new(EngineConfig::default()))
+    }
+  }
+
+  pub fn get_config(&mut self) -> Result<Arc<EngineConfig>, StateManagerError> {
+    match self.config.lock() {
+        Ok(mutex) => Ok(Arc::new(mutex.clone())),
+        Err(_) => return Err(StateManagerError::MutexLockError),
+    }
+  }
+
+  pub fn get_dasp_state(&mut self) -> Result<Arc<DASPState>, StateManagerError> {
+    match self.dasp_state.lock() {
+        Ok(mutex) => Ok(Arc::new(mutex.clone())),
+        Err(_) => return Err(StateManagerError::MutexLockError),
     }
   }
 
@@ -150,10 +215,12 @@ impl StateManager {
     }
   }
 
-  pub async fn save_config(config: &EngineConfig, path: &Path) -> anyhow::Result<()> {
-      let contents = yaml_serde::to_string(config)?;
-      tokio::fs::write(path, contents).await?;
-      Ok(())
+  pub async fn save_config(&mut self, config: &EngineConfig) -> anyhow::Result<()> {
+    let contents = yaml_serde::to_string(config)?;
+    let path = &self.config.lock().unwrap().config_path;
+    
+    tokio::fs::write(path, contents).await?;
+    Ok(())
   }
 
 }

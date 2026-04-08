@@ -1,14 +1,19 @@
 use std::collections::{ HashMap };
+use std::fs;
+use std::io::{BufRead, BufReader};
 use std::sync::{ Arc };
-use std::process::{ Command, ExitStatus };
+use std::process::{ Command, Stdio };
+use std::path::{ PathBuf };
 
 use tokio::sync::RwLock;
+//use tokio::process::Command;
 use yansi::Paint;
 
-use jack::{ Client, ClientOptions, ClientStatus };
+use mixeros_jack::{ Client, ClientOptions, ClientStatus };
 
 use crate::cli::table::LiveTable;
-use crate::system::util::{ ChannelType, BusType, DASPStatus, SampleRate, get_sample_rate };
+use crate::system::state::{BusConfig, ChannelConfig};
+use crate::system::util::{ ChannelPermissions, BusType, DASPStatus, SampleRate, get_sample_rate };
 use crate::router::{ channel, bus };
 use crate::dasp::processor::*;
 
@@ -17,8 +22,8 @@ pub struct Engine {
   kernel_manager: Arc<KernelManager>,
   client: Option<Client>,
   status: Option<ClientStatus>,
-  channels: HashMap<usize, Arc<RwLock<channel::ChannelStrip>>>,
-  buses: HashMap<usize, Arc<RwLock<bus::Bus>>>,
+  channels: HashMap<u32, Arc<RwLock<channel::ChannelStrip>>>,
+  buses: HashMap<u32, Arc<RwLock<bus::Bus>>>,
   sample_rate: SampleRate,
   buffer_size: usize,
   table: LiveTable,
@@ -31,16 +36,38 @@ pub enum EngineError {
   ChannelDoesNotExist,
   NoDevices,
   NoGPU,
-  JackServerFailedToStart
+  JackError(mixeros_jack::Error)
+}
+
+fn default_modules() -> Vec<PathBuf> {
+  let mut vec: Vec<PathBuf> = Vec::new();
+  let modules_kernel_path: PathBuf = match std::env::var_os("MODULES_KERNEL_PATH") {
+    Some(path) => PathBuf::from(path),
+    None => PathBuf::from("./shaders"),
+  };
+  
+  for entry in fs::read_dir(modules_kernel_path).unwrap() {
+    let entry = entry.unwrap();
+
+    vec.push(entry.path().to_path_buf());
+  }
+
+  vec
 }
 
 impl Engine {
-  pub fn new(name: String, ch: usize, buses: usize, sample_rate: SampleRate, buffer_size: usize, table: LiveTable) -> Self {
-    let channel_strips: HashMap<usize, Arc<RwLock<channel::ChannelStrip>>> = HashMap::with_capacity(ch);
-    let buses: HashMap<usize, Arc<RwLock<bus::Bus>>> = HashMap::with_capacity(buses);
+  pub fn new(name: String, sample_rate: SampleRate, buffer_size: usize, table: LiveTable, additional_modules: Option<Vec<PathBuf>>) -> Self {
+    let channel_strips: HashMap<u32, Arc<RwLock<channel::ChannelStrip>>> = HashMap::new();
+    let buses: HashMap<u32, Arc<RwLock<bus::Bus>>> = HashMap::new();
+    let mut paths: Vec<PathBuf> = default_modules();
 
-    let kernel_manager = KernelManager::new(None).expect("Could not find any OpenCL3 compatible platforms/devices");
+    match additional_modules {
+        Some(mut x) => paths.append(&mut x),
+        None => {},
+    }
 
+    let kernel_manager = Self::init_kernel_manager(paths);
+ 
     Self {
       name,
       kernel_manager: Arc::new(kernel_manager),
@@ -55,7 +82,18 @@ impl Engine {
     }
   }
 
-  fn init(&mut self) -> Result<(), EngineError>{
+  fn init_kernel_manager(paths: Vec<PathBuf>) -> KernelManager {
+    let mut kernel_manager: KernelManager = KernelManager::new(None).expect("Could not find any OpenCL compatible platform/device");
+    for path in paths {
+      let _ = kernel_manager.add_program(path.as_os_str().to_str().unwrap(), &[path.file_name().unwrap().to_str().unwrap()]);
+    }
+
+    kernel_manager
+  }
+
+  async fn init(&mut self, ch: Vec<ChannelConfig>, buses: Vec<BusConfig>) -> Result<(), EngineError>{
+    let mut jackd_started: bool = false;
+
     #[cfg(target_os = "macos")]
     let audio_backend: String = "coreaudio".to_string();
 
@@ -65,46 +103,83 @@ impl Engine {
     #[cfg(target_os = "linux")]
     let audio_backend: String = "alsa".to_string();
 
+    #[cfg(feature = "debug")]
+    let audio_backend = "dummy".to_string();
+
     let mut client_options = ClientOptions::empty();
-
-    client_options.insert(ClientOptions::USE_EXACT_NAME);
-    client_options.insert(ClientOptions::NO_START_SERVER);
-
     let sample_rate = get_sample_rate(self.sample_rate);
-    let is_running = Command::new("jack_control").arg("status").spawn().unwrap().wait().unwrap();
 
-    if 1 == ExitStatus::code(&is_running).unwrap() {
-      println!("Jack server already started");
-    } else {
-      let jackd_cmd = Command::new("jackd")
-        .arg("-r")
-        .arg(format!("-d{}", audio_backend))
-        .arg(format!("-p {}", self.buffer_size))
-        .arg(format!("-r {}", sample_rate))
-        .arg("&")
-        .spawn()
-        .unwrap()
-        .wait();
+    client_options.set(ClientOptions::USE_EXACT_NAME, true);
+    client_options.set(ClientOptions::NO_START_SERVER, true);
 
-      if jackd_cmd.unwrap().success() {
-        print!("Started the Jack Audio server")
-      } else {
-        return Err(EngineError::JackServerFailedToStart)
+    println!("Starting jack server");
+    println!("Killing any old servers");
+    let _ = Command::new("pkill").arg("jackd").spawn().unwrap().wait();
+    let _ = Command::new("killall").arg("-9").arg("jackd").spawn().unwrap().wait();
+
+    let mut jackd_cmd = Command::new("jackd")
+      //.arg("-r")
+      .arg(format!("-d{}", audio_backend))
+      .arg(format!("-p{}", self.buffer_size))
+      .arg(format!("-r{}", sample_rate))
+      //.arg("--port-max 8192")
+      .args([">", "./tmp/jack.log 2>&1"]) // TODO change this to log to a file
+      .arg("&")
+      .stdin(Stdio::null())
+      .stdout(Stdio::piped())
+      .spawn()
+      .unwrap();
+
+    while jackd_started == false {
+      println!("Waiting for Jack Server to initilize");
+      let jack_stdout = jackd_cmd.stdout.take().expect("Could not get stdout of jackd command");
+      let reader = BufReader::new(jack_stdout);
+
+      for line in reader.lines() {
+        let line = line.expect("Couldn't read line");
+        println!("{}", line);
+        if line.contains("driver is running...") {
+          jackd_started = true;
+          println!("Started the Jack server");
+          break;
+        }
       }
+
+      jackd_cmd.try_wait().inspect(|f| {
+        match f {
+            Some(x) => {
+              println!("jackd exited with: {}", x)
+            },
+            None => {},
+        }
+      }).expect("jackd Error");
+
+      std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
 
-    if self.client.is_none() && self.status.is_none() {
-      let (client, status) = Client::new(&self.name, client_options).unwrap();
+    let c = Client::new(&self.name.as_str(), client_options);
+    let (client, status) = match c {
+      Ok((client, status)) => {
+        println!("Connected, status: {:?}", status);
+        (client, status)
+      },
+      Err(e) => return {
+        Err(EngineError::JackError(e))
+      },
+    };
 
-      self.client = Some(client);
-      self.status = Some(status);
-    }
+    println!("Client: {:?}", status);
+
+    self.client = Some(client);
+    self.status = Some(status);
+
+    
 
     let mut talkback = channel::ChannelStrip::new(
       "Talkback".to_string(),
       1, 
-      ChannelType::SYSTEM, 
+      ChannelPermissions::SYSTEM, 
       false,
       self.sample_rate, 
       self.buffer_size,
@@ -112,9 +187,9 @@ impl Engine {
     );
 
     let mut comms = channel::ChannelStrip::new(
-      "Comms".to_string(),
+      "Intercom".to_string(),
       2, 
-      ChannelType::SYSTEM,
+      ChannelPermissions::SYSTEM,
       false,
       self.sample_rate, 
       self.buffer_size,
@@ -141,17 +216,17 @@ impl Engine {
       self.kernel_manager.clone()
     );
 
-    mains.add_modules();
-    self.table.add_row(mains.table_row());
+    //mains.add_modules();
+    //self.table.add_row(mains.table_row());
 
-    monitor.add_modules();
-    self.table.add_row(monitor.table_row());
+    //monitor.add_modules();
+    //self.table.add_row(monitor.table_row());
 
-    talkback.add_modules();
-    self.table.add_row(talkback.table_row());
+    //talkback.add_modules();
+    //self.table.add_row(talkback.table_row());
 
-    comms.add_modules();
-    self.table.add_row(comms.table_row());
+    //comms.add_modules();
+    //self.table.add_row(comms.table_row());
 
     self.add_bus(1, mains).ok();
     self.add_bus(2, monitor).ok();
@@ -161,45 +236,46 @@ impl Engine {
 
     
 
-    for ch in 3..self.channels.capacity() {
+    for ch_cfg in ch {
       let mut strip = channel::ChannelStrip::new(
-        format!("Channel: {}", ch - 3), 
-        ch, 
-        ChannelType::USER,
-        true, 
+        ch_cfg.name, 
+        ch_cfg.id, 
+        ChannelPermissions::USER,
+        ch_cfg.is_redundant, 
         self.sample_rate, 
         self.buffer_size,
         self.kernel_manager.clone()
       );
 
-      strip.add_modules();
-      self.add_channel(ch, strip).ok();
+      //strip.add_modules();
+      self.add_channel(ch_cfg.id, strip).ok();
     }
 
-    for bus in 3..self.buses.capacity() {
+    for bus in buses {
       let mut bus_strip = bus::Bus::new(
-        format!("Bus: {}", bus - 3), 
-        bus,
+        bus.name, 
+        bus.id,
         BusType::AUX, 
-        2,
+        1,
         self.sample_rate,  
         self.buffer_size,
         self.kernel_manager.clone()
       );
 
-      bus_strip.add_modules();
-      self.add_bus(bus, bus_strip).ok();
+      //bus_strip.add_modules();
+      self.add_bus(bus.id, bus_strip).ok();
     }
-
-    let _ = self.client.as_mut().unwrap().transport().start();
 
     Ok(())
   }
 
-  pub fn start(&mut self) -> Result<(), EngineError> {
+  pub async fn start(&mut self, ch: Vec<ChannelConfig>, buses: Vec<BusConfig>) -> Result<(), EngineError> {
     println!("Starting MixerOS Engine");
 
-    self.init()
+    let _init = self.init(ch, buses).await.unwrap();
+    let _ = self.client.as_mut().unwrap().transport().start();
+
+    Ok(())
   }
 
   pub async fn run(&mut self) {
@@ -236,8 +312,8 @@ impl Engine {
     self.dasp_status = DASPStatus::ONLINE;
   }
 
-  pub fn add_channel(&mut self, channel_number: usize, ch: channel::ChannelStrip) -> Result<(), EngineError> {
-    if self.channels.len() == usize::MAX {
+  pub fn add_channel(&mut self, channel_number: u32, ch: channel::ChannelStrip) -> Result<(), EngineError> {
+    if self.channels.len() as u32 == u32::MAX {
       return Err(EngineError::MaxChannels)
     }
 
@@ -245,9 +321,9 @@ impl Engine {
     Ok(())
   }
 
-  pub fn remove_channel(&mut self, channel_number: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
+  pub fn remove_channel(&mut self, channel_number: u32) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     let channel = self.channels.get(&channel_number);
-    if channel_number > usize::MAX {
+    if channel_number > u32::MAX {
       return Err(EngineError::ChannelDoesNotExist)
     } 
 
@@ -258,7 +334,7 @@ impl Engine {
     
   }
 
-  pub fn get_channel(&mut self, channel: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
+  pub fn get_channel(&self, channel: u32) -> Result<Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     if self.channels.len() == usize::MAX {
       return Err(EngineError::MaxChannels)
     }
@@ -266,13 +342,13 @@ impl Engine {
     let ch = self.channels.get(&channel);
 
     match ch {
-        Some(x) => Ok(x),
+        Some(x) => Ok(x.clone()),
         None => Err(EngineError::ChannelDoesNotExist),
     }
   }
 
-  pub fn add_bus(&mut self, bus_number: usize, bus: bus::Bus) -> Result<(), EngineError> {
-    if self.buses.len() == usize::MAX {
+  pub fn add_bus(&mut self, bus_number: u32, bus: bus::Bus) -> Result<(), EngineError> {
+    if self.buses.len() as u32 == u32::MAX {
       return Err(EngineError::MaxChannels)
     }
 
@@ -282,9 +358,9 @@ impl Engine {
     Ok(())
   }
 
-  pub fn remove_bus(&mut self, channel_number: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
-    let channel = self.channels.get(&channel_number);
-    if channel_number > usize::MAX {
+  pub fn remove_bus(&mut self, channel_number: u32) -> Result<&Arc<RwLock<bus::Bus>>, EngineError> {
+    let channel = self.buses.get(&channel_number);
+    if channel_number > u32::MAX {
       return Err(EngineError::ChannelDoesNotExist)
     } 
 
@@ -295,7 +371,7 @@ impl Engine {
     
   }
 
-  pub fn get_bus(&mut self, channel: usize) -> Result<&Arc<RwLock<channel::ChannelStrip>>, EngineError> {
+  pub fn get_bus(&self, channel: u32) -> Result<Arc<RwLock<channel::ChannelStrip>>, EngineError> {
     if self.channels.len() == usize::MAX {
       return Err(EngineError::MaxChannels)
     }
@@ -303,16 +379,16 @@ impl Engine {
     let ch = self.channels.get(&channel);
 
     match ch {
-        Some(x) => Ok(x),
+        Some(x) => Ok(x.clone()),
         None => Err(EngineError::ChannelDoesNotExist),
     }
   }
 
-  pub fn get_channels(&mut self) -> HashMap<usize, Arc<RwLock<channel::ChannelStrip>>> {
+  pub fn get_channels(&self) -> HashMap<u32, Arc<RwLock<channel::ChannelStrip>>> {
     self.channels.clone()
   }
 
-  pub fn get_buses(&mut self) -> HashMap<usize, Arc<RwLock<bus::Bus>>> {
+  pub fn get_buses(&self) -> HashMap<u32, Arc<RwLock<bus::Bus>>> {
     self.buses.clone()
   }
 }

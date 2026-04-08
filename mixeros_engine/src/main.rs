@@ -5,10 +5,15 @@ pub mod system;
 pub mod cli;
 pub mod web;
 
-use crate::engine::{ Engine };
+use std::sync::Arc;
+
+use tokio::sync::RwLock;
+
+use crate::engine::{ Engine };  
 use crate::system::StateManager;
 use crate::cli::*;
-use crate::web::server::WebServer;
+use crate::web::server::Networking;
+use ctrlc;
 
   
 #[tokio::main(flavor = "multi_thread", worker_threads = 32)]
@@ -17,7 +22,6 @@ async fn main() {
 
   let mut sm = StateManager::new().await;
   let mut config: system::state::EngineConfig = Default::default();
-  let mut web = WebServer::new(config.ws_port);
 
   match sm.init().await.ok() {
     Some(x) => config = x,
@@ -29,13 +33,13 @@ async fn main() {
   let tui = Tui::new(config.clone());
   tui.launch();
   
-  let mut proc = Engine::new(config.name, config.channels, config.bus, config.sample_rate, config.buffer_size, tui.table);
+  let mut proc = Engine::new(config.name,  config.sample_rate, config.buffer_size, tui.table, None);
   
-  proc.start().unwrap();
+  proc.start(config.channels, config.buses).await.unwrap();
   proc.run().await;
 
-  let _webserver_thread = rt.spawn(async move {
-    web.start_web().await;
-  }).await;
+  let mut web = Networking::new(config.webserver_port, Arc::new(RwLock::new(sm)), Arc::new(RwLock::new(proc)));
+  let _web_handle = web.start_web().await.unwrap();
+  let _rpc_handle = web.start_rpc().await.unwrap();
 
 }

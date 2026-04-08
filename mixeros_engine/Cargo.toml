@@ -1,12 +1,22 @@
 [package]
 name = "mixeros_engine"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2024"
-licence = "GPL-3.0-or-later"
+license = "GPL-3.0-or-later"
+include = ["/shaders", "/ui"]
+
+[features]
+debug = []
+
+[profile.release]
+strip = true      
+opt-level = "z"   
+lto = true        
+codegen-units = 1
 
 [dependencies]
-jack = {version = "0.13.5", features = ["dynamic_loading"]}
 num = "0.4.3"
+ctrlc = "3.5"
 
 anyhow = "1.0"
 ringbuf = "0.4.8"
@@ -19,23 +29,31 @@ whoami = "2.1.1"
 comfy-table = "7.2.2"
 crossterm = "0.29.0"
 sysinfo = "0.38.4"
-
+getifs = "0.4"
 
 # net libs
 axum = "0.8.8"
 serde = { version = "1.0", features = ["derive"] }
 yaml_serde = "0.10.4"
 serde_json = "1"
-tokio = { version = "1.50.0", features = ["full"] }
+tokio = { version = "1.51.0", features = ["full"] }
 capnp-rpc = "0.25.0"
 capnp = "0.25.2"
+tokio-util = { version = "0.7.18", features = ["compat"] }
+futures = { version = "0.3.0", features = ["std"]}
 
 # compute
-gpu-allocator = "0.28.0"
 bytemuck = { version = "1", features = ["derive"] }
-[dependencies.opencl3]
-version = "0.12"
-features = ["CL_VERSION_2_1", "CL_VERSION_2_2", "CL_VERSION_3_0", "serde"]
 
-# mixeros libs
-mixeros_protocol = { path = "../mixeros_protocol" }
+# local
+mixeros_jack.workspace = true
+mixeros_protocol.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+opencl3 = { version="0.12", features = ["CL_VERSION_1_2", "serde"]}
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+opencl3 = { version="0.12", features = ["CL_VERSION_2_1", "CL_VERSION_2_2", "CL_VERSION_3_0", "serde"]} 
+
+
+

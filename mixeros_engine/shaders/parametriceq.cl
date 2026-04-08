@@ -1,10 +1,9 @@
 // MixerOS Parametric EQ
+
 typedef struct {
     float b0, b1, b2, a1, a2;
 } EqBand;
 
-// coeffs.bands is laid out as: [b0, b1, b2, a1, a2,  b0, b1, b2, a1, a2, ...]
-//                               |---- band 0 ----|   |---- band 1 ----|
 void get_band(
     __constant const float* bands,
     uint i,
@@ -21,15 +20,12 @@ void get_band(
 __kernel void eq_process(
     __global const float* input_data,
     __global       float* output_data,
-    __constant     float* bands,       // flattened [num_bands * 5] coefficients
-    uint                  num_samples, // samples per channel
-    uint                  num_bands)   // number of EQ bands (replaces the hardcoded 6)
+    __constant     float* bands,       
+    uint num_samples, 
+    uint num_bands) 
 {
     uint channel = get_global_id(0);
 
-    // Per-channel biquad state — one w1/w2 per band.
-    // OpenCL C requires fixed-size arrays; size must be a compile-time constant.
-    // 6 bands is the max here; guard with num_bands at runtime.
     float w1[6] = {0, 0, 0, 0, 0, 0};
     float w2[6] = {0, 0, 0, 0, 0, 0};
 
@@ -42,7 +38,6 @@ __kernel void eq_process(
             EqBand b;
             get_band(bands, band, &b);
 
-            // Transposed Direct Form II biquad
             float w = x - (b.a1 * w1[band]) - (b.a2 * w2[band]);
             float y = (b.b0 * w) + (b.b1 * w1[band]) + (b.b2 * w2[band]);
 
